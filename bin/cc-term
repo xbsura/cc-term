@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CC_HOME="${CC_HOME:-$HOME/.cc-terminal}"
+LEGACY_BIN="$SCRIPT_DIR/cc-terminal"
+if [[ ! -x "$LEGACY_BIN" && -x "$CC_HOME/bin/cc-terminal" ]]; then
+    LEGACY_BIN="$CC_HOME/bin/cc-terminal"
+fi
+PROVIDER_MANAGER="$SCRIPT_DIR/cc-provider-manager.py"
+if [[ ! -f "$PROVIDER_MANAGER" && -f "$CC_HOME/bin/cc-provider-manager.py" ]]; then
+    PROVIDER_MANAGER="$CC_HOME/bin/cc-provider-manager.py"
+fi
+
+usage() {
+    echo ""
+    echo "cc-term — macOS iTerm2 + tmux toolkit"
+    echo ""
+    echo "  cc-term -ls"
+    echo "  cc-term -new <name> [-r] [-q] [-s]"
+    echo "  cc-term <name> [-r] [-q] [-s]"
+    echo "  cc-term -delete <name>"
+    echo ""
+    echo "  cc-term -provider -ls"
+    echo "  cc-term -provider -new [-name <name>] -api <url> -key <key> [-appId <appId>]"
+    echo "  cc-term -provider -edit <index|name|key> [-name <name>] [-api <url>] [-key <key>] [-appId <appId>]"
+    echo "  cc-term -provider -delete <index|name|key>"
+    echo ""
+    echo "  直接写 cc-term <name> 等价于 cc-term -new <name>"
+    echo ""
+}
+
+if [[ $# -eq 0 ]]; then
+    exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN"
+fi
+
+case "$1" in
+    -h|--help)
+        usage
+        ;;
+    -ls)
+        shift
+        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" ls "$@"
+        ;;
+    -new)
+        shift
+        if [[ $# -lt 1 ]]; then
+            echo "缺少 session 名称"
+            usage
+            exit 1
+        fi
+        session_name="$1"
+        shift
+        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" "$session_name" "$@"
+        ;;
+    -delete)
+        shift
+        if [[ $# -lt 1 ]]; then
+            echo "缺少 session 名称"
+            usage
+            exit 1
+        fi
+        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" delete "$1"
+        ;;
+    -provider)
+        shift
+        sub="${1:-}"
+        case "$sub" in
+            ""|-ls)
+                exec python3 "$PROVIDER_MANAGER" list
+                ;;
+            -new)
+                shift
+                exec python3 "$PROVIDER_MANAGER" new "$@"
+                ;;
+            -edit)
+                shift
+                exec python3 "$PROVIDER_MANAGER" edit "$@"
+                ;;
+            -delete)
+                shift
+                exec python3 "$PROVIDER_MANAGER" delete "$@"
+                ;;
+            *)
+                exec python3 "$PROVIDER_MANAGER" set-default "$sub"
+                ;;
+        esac
+        ;;
+    *)
+        if [[ "$1" == -* ]]; then
+            exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" "$@"
+        fi
+        session_name="$1"
+        shift
+        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" "$session_name" "$@"
+        ;;
+esac

@@ -1,0 +1,72 @@
+" ============================================================
+" cc-terminal vimrc — minimal, fast, prompt-writing focused
+" ============================================================
+
+" --- Basics ---
+set nocompatible
+set encoding=utf-8
+set fileencoding=utf-8
+
+" --- Appearance ---
+syntax on
+set background=dark
+colorscheme desert
+set number
+set relativenumber
+set cursorline
+set showmatch
+set signcolumn=no
+set laststatus=2
+set statusline=%f\ %m%r%=%l/%L\ col:%c\ %p%%
+
+" --- Indentation ---
+set tabstop=4
+set shiftwidth=4
+set softtabstop=4
+set expandtab
+set autoindent
+set smartindent
+
+" --- Search ---
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
+
+" --- Behavior ---
+set backspace=indent,eol,start
+set scrolloff=5
+set wildmenu
+set wildmode=longest:full,full
+set hidden
+set clipboard=unnamed
+set mouse=a
+set ttimeoutlen=50
+
+" --- Performance ---
+set lazyredraw
+set ttyfast
+
+" --- No swap/backup clutter ---
+set noswapfile
+set nobackup
+set nowritebackup
+
+" --- Key mappings ---
+" Quick save
+nnoremap <C-s> :w<CR>
+inoremap <C-s> <Esc>:w<CR>a
+
+" Clear search highlight
+nnoremap <Esc><Esc> :nohlsearch<CR>
+
+" Better window navigation
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
+" Soft wrap for long prompt writing
+set wrap
+set linebreak
+set breakindent

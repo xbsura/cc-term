@@ -1,0 +1,1087 @@
+#!/usr/bin/env bash
+# ============================================================
+# cc-terminal — AI coding terminal environment for macOS
+# ============================================================
+
+CC_HOME="$HOME/.cc-terminal"
+BASH_PROFILE="$CC_HOME/config/bash_profile"
+REMOTE_SERVER="$CC_HOME/bin/cc-remote-server.py"
+RELAY_SERVER="$CC_HOME/bin/cc-relay-server.py"
+PROXY_SERVER="$CC_HOME/bin/cc-proxy-server.py"
+STATE_MANAGER="$CC_HOME/bin/cc-state-manager.py"
+PROVIDER_MANAGER="$CC_HOME/bin/cc-provider-manager.py"
+REMOTE_PID_DIR="$CC_HOME/run"
+PRIVATE_SESSIONS_FILE="$CC_HOME/run/private_sessions"
+
+TTYD_THEME='{"background":"#121212","foreground":"#bbbbbb","cursor":"#bbbbbb","black":"#121212","red":"#fa2573","green":"#97e123","yellow":"#dfd460","blue":"#0f7fcf","magenta":"#8700ff","cyan":"#42a7cf","white":"#bbbbbb","brightBlack":"#555555","brightRed":"#f5669c","brightGreen":"#b0e05e","brightYellow":"#fef26c","brightBlue":"#00afff","brightMagenta":"#af87ff","brightCyan":"#50cdfe","brightWhite":"#ffffff"}'
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+info()  { echo -e "${CYAN}[cc-terminal]${NC} $*"; }
+ok()    { echo -e "${GREEN}[cc-terminal]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[cc-terminal]${NC} $*"; }
+err()   { echo -e "${RED}[cc-terminal]${NC} $*" >&2; }
+
+usage() {
+    echo ""
+    echo -e "${BOLD}cc-terminal${NC} — compatible core for ${BOLD}cc-term${NC}"
+    echo ""
+    echo -e "${BOLD}Session:${NC}"
+    echo "  cc-term -ls                        List sessions (with remote URLs)"
+    echo "  cc-term -new <name> [-r] [-q] [-s] Open a new iTerm2 tab + tmux session"
+    echo "  cc-term <name> [-r] [-q] [-s]      Same as: cc-term -new <name>"
+    echo "  cc-term -delete <name>             Destroy a tmux session"
+    echo ""
+    echo -e "${BOLD}Provider:${NC}"
+    echo "  cc-term -provider -ls"
+    echo "  cc-term -provider -new [-name <name>] -api <url> -key <key> [-appId <appId>]"
+    echo "  cc-term -provider -edit <index|name|key> [-name <name>] [-api <url>] [-key <key>] [-appId <appId>]"
+    echo "  cc-term -provider -delete <index|name|key>"
+    echo "  ccs <provider-name>                Use provider by name"
+    echo ""
+    echo -e "${BOLD}Remote:${NC}"
+    echo "  cc-terminal -server                Start aggregate proxy page"
+    echo "  cc-terminal -server -stop          Stop proxy server and remotes"
+    echo "  cc-terminal -r <name>              Register specific tmux sessions"
+    echo ""
+    echo -e "${BOLD}State:${NC}"
+    echo "  cc-terminal save                   Save all sessions, windows, panes"
+    echo "  cc-terminal recover                Restore saved sessions"
+    echo ""
+    echo -e "${BOLD}Plugins:${NC}"
+    echo "  cc-terminal plugins"
+    echo "  cc-terminal plugin install <name>"
+    echo "  cc-terminal plugin uninstall <name>"
+    echo ""
+    echo -e "${BOLD}Other:${NC}"
+    echo "  cc-term -h / cc-terminal -h        Show this help"
+    echo ""
+}
+
+# ----------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------
+get_local_ip() {
+    local ip
+    ip=$(ipconfig getifaddr en0 2>/dev/null)
+    [[ -z "$ip" ]] && ip=$(ipconfig getifaddr en1 2>/dev/null)
+    [[ -z "$ip" ]] && ip="127.0.0.1"
+    echo "$ip"
+}
+
+show_qr() {
+    local url="$1"
+    if command -v qrencode &>/dev/null; then
+        echo ""
+        qrencode -t ANSIUTF8 "$url"
+        echo ""
+    fi
+}
+
+require_config() {
+    if [[ ! -f "$BASH_PROFILE" ]]; then
+        err "Config not found at $BASH_PROFILE"
+        err "Please run install.sh first."
+        exit 1
+    fi
+}
+
+add_private_session() {
+    local name="$1"
+    mkdir -p "$REMOTE_PID_DIR"
+    touch "$PRIVATE_SESSIONS_FILE"
+    if ! grep -qx "$name" "$PRIVATE_SESSIONS_FILE" 2>/dev/null; then
+        echo "$name" >> "$PRIVATE_SESSIONS_FILE"
+    fi
+}
+
+remove_private_session() {
+    local name="$1"
+    if [[ -f "$PRIVATE_SESSIONS_FILE" ]]; then
+        local tmp="${PRIVATE_SESSIONS_FILE}.tmp"
+        grep -vx "$name" "$PRIVATE_SESSIONS_FILE" > "$tmp" 2>/dev/null || true
+        mv "$tmp" "$PRIVATE_SESSIONS_FILE"
+    fi
+}
+
+delete_session() {
+    local session_name="$1"
+    local proxy_port="${2:-9999}"
+
+    if [[ -z "$session_name" ]]; then
+        err "Usage: cc-term -delete <name>"
+        return 1
+    fi
+
+    if ! tmux -L cc-terminal has-session -t "$session_name" 2>/dev/null; then
+        err "Session not found: $session_name"
+        return 1
+    fi
+
+    stop_ttyd_registration "$session_name" "$proxy_port" >/dev/null 2>&1 || true
+    remove_private_session "$session_name"
+
+    if tmux -L cc-terminal kill-session -t "$session_name" 2>/dev/null; then
+        ok "Deleted session: $session_name"
+        return 0
+    fi
+
+    err "Failed to delete session: $session_name"
+    return 1
+}
+
+
+unregister_proxy_token() {
+    local token="$1"
+    local proxy_port="${2:-9999}"
+    [[ -z "$token" ]] && return 0
+    TOKEN="$token" PROXY_PORT="$proxy_port" python3 -c "
+import http.client, json, os
+try:
+    conn = http.client.HTTPConnection('localhost', int(os.environ['PROXY_PORT']), timeout=3)
+    body = json.dumps({'token': os.environ['TOKEN']})
+    conn.request('POST', '/api/unregister', body, {'Content-Type': 'application/json'})
+    conn.getresponse().read()
+    conn.close()
+except Exception:
+    pass
+" >/dev/null 2>&1
+}
+
+
+# ----------------------------------------------------------
+# ttyd helpers
+# ----------------------------------------------------------
+find_free_port() {
+    local port="${1:-17681}"
+    while lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; do
+        port=$((port + 1))
+    done
+    echo "$port"
+}
+
+ttyd_file_base() {
+    local session_name="$1"
+    local safe hash
+    safe=$(printf '%s' "$session_name" | tr -cs '[:alnum:]_.-' '-')
+    safe=$(printf '%s' "$safe" | sed 's/^-*//; s/-*$//')
+    [[ -z "$safe" ]] && safe="session"
+    hash=$(printf '%s' "$session_name" | shasum | awk '{print substr($1, 1, 8)}')
+    echo "ttyd-${safe}-${hash}"
+}
+
+ttyd_meta_path() {
+    echo "$REMOTE_PID_DIR/$(ttyd_file_base "$1").json"
+}
+
+stop_ttyd_registration() {
+    local session_name="$1"
+    local proxy_port="${2:-9999}"
+    local meta_file info token ttyd_pid
+    meta_file=$(ttyd_meta_path "$session_name")
+    [[ -f "$meta_file" ]] || return 0
+
+    info=$(META_FILE="$meta_file" python3 -c "
+import json, os
+try:
+    with open(os.environ['META_FILE']) as f:
+        data = json.load(f)
+    print('%s|%s' % (data.get('token', ''), data.get('pid', '')))
+except Exception:
+    print('|')
+")
+    token=${info%%|*}
+    ttyd_pid=${info#*|}
+
+    unregister_proxy_token "$token" "$proxy_port"
+    if [[ -n "$ttyd_pid" ]]; then
+        kill "$ttyd_pid" 2>/dev/null || true
+    fi
+    rm -f "$meta_file"
+}
+
+register_ttyd_session() {
+    local session_name="$1"
+    local proxy_port="${2:-9999}"
+    local local_ip="$3"
+    local meta_file ttyd_port token register_result proxy_path ttyd_pid
+    local session_meta windows attached
+
+    if ! command -v ttyd >/dev/null 2>&1; then
+        err "ttyd is not installed. Install it first with: brew install ttyd"
+        return 1
+    fi
+
+    if ! wait_for_tmux_session "$session_name" 8; then
+        err "tmux session '$session_name' not found."
+        return 1
+    fi
+
+    mkdir -p "$REMOTE_PID_DIR"
+    stop_ttyd_registration "$session_name" "$proxy_port" >/dev/null 2>&1 || true
+
+    meta_file=$(ttyd_meta_path "$session_name")
+    ttyd_port=$(find_free_port 17681)
+    token=$(openssl rand -hex 12)
+
+    ttyd -W -p "$ttyd_port" \
+        --base-path "/t/${token}" \
+        -t cursorStyle=bar \
+        -t cursorBlink=true \
+        -t fontSize=14 \
+        -t "fontFamily=MesloLGS NF,Menlo,monospace" \
+        -t "theme=${TTYD_THEME}" \
+        tmux -L cc-terminal -f "$CC_HOME/config/tmux.conf" new-session -A -s "$session_name" \
+        >/dev/null 2>&1 &
+
+    ttyd_pid=$!
+    sleep 1
+
+    if ! kill -0 "$ttyd_pid" 2>/dev/null; then
+        err "Failed to start ttyd for session '$session_name'."
+        return 1
+    fi
+
+    session_meta=$(tmux -L cc-terminal list-sessions -F '#{session_name}:#{session_windows}:#{session_attached}' 2>/dev/null | awk -F: -v target="$session_name" '$1 == target { print $2 "|" $3; exit }')
+    windows=${session_meta%%|*}
+    attached=${session_meta#*|}
+    [[ -z "$windows" || "$windows" == "$session_meta" ]] && windows="?"
+    [[ -z "$attached" || "$attached" == "$session_meta" ]] && attached="0"
+
+    register_result=$(SESSION_NAME="$session_name" TTYD_PORT="$ttyd_port" TOKEN="$token" WINDOWS="$windows" ATTACHED="$attached" PROXY_PORT="$proxy_port" python3 -c "
+import http.client, json, os, sys
+body = json.dumps({
+    'kind': 'ttyd',
+    'name': os.environ['SESSION_NAME'],
+    'label': os.environ['SESSION_NAME'],
+    'port': int(os.environ['TTYD_PORT']),
+    'token': os.environ['TOKEN'],
+    'windows': os.environ['WINDOWS'],
+    'attached': os.environ['ATTACHED'],
+})
+try:
+    conn = http.client.HTTPConnection('localhost', int(os.environ['PROXY_PORT']), timeout=5)
+    conn.request('POST', '/api/register', body, {'Content-Type': 'application/json'})
+    resp = conn.getresponse()
+    raw = resp.read().decode()
+    conn.close()
+    if resp.status != 200:
+        print(raw, file=sys.stderr)
+        sys.exit(1)
+    print(raw)
+except Exception as exc:
+    print(str(exc), file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+
+    if [[ $? -ne 0 || -z "$register_result" ]]; then
+        err "Failed to register '$session_name' with proxy server at localhost:${proxy_port}"
+        kill "$ttyd_pid" 2>/dev/null || true
+        return 1
+    fi
+
+    proxy_path=$(REGISTER_RESULT="$register_result" python3 -c "import json, os; data = json.loads(os.environ['REGISTER_RESULT']); print(data.get('path', ''))")
+
+    if [[ -z "$proxy_path" ]]; then
+        err "Proxy server returned an incomplete registration for '$session_name'."
+        kill "$ttyd_pid" 2>/dev/null || true
+        return 1
+    fi
+
+    META_FILE="$meta_file" SESSION_NAME="$session_name" TOKEN="$token" PID="$ttyd_pid" TTYD_PORT="$ttyd_port" WINDOWS="$windows" ATTACHED="$attached" PROXY_PATH="$proxy_path" python3 -c "
+import json, os
+with open(os.environ['META_FILE'], 'w') as f:
+    json.dump({
+        'session_name': os.environ['SESSION_NAME'],
+        'token': os.environ['TOKEN'],
+        'pid': int(os.environ['PID']),
+        'port': int(os.environ['TTYD_PORT']),
+        'windows': os.environ['WINDOWS'],
+        'attached': os.environ['ATTACHED'],
+        'proxy_path': os.environ['PROXY_PATH'],
+    }, f, indent=2, sort_keys=True)
+" >/dev/null 2>&1
+
+    TTYD_REGISTERED_URL="http://${local_ip}:${proxy_port}${proxy_path}"
+    TTYD_AGGREGATE_URL="http://${local_ip}:${proxy_port}/"
+    return 0
+}
+
+list_target_sessions() {
+    local sessions_csv="$1"
+
+    if [[ -n "$sessions_csv" ]]; then
+        printf '%s' "$sessions_csv" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF'
+        return
+    fi
+
+    tmux -L cc-terminal list-sessions -F '#{session_name}' 2>/dev/null | while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        if [[ -f "$PRIVATE_SESSIONS_FILE" ]] && grep -qx "$name" "$PRIVATE_SESSIONS_FILE" 2>/dev/null; then
+            continue
+        fi
+        echo "$name"
+    done
+}
+
+wait_for_tmux_session() {
+    local session_name="$1"
+    local timeout_seconds="${2:-8}"
+    local waited=0
+
+    while (( waited < timeout_seconds * 10 )); do
+        if tmux -L cc-terminal has-session -t "$session_name" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+
+    return 1
+}
+
+open_iterm_tab() {
+    local session_name="$1"
+
+    # Strategy: start bash with our profile, then type tmux command separately.
+    # The tmux alias in bash_profile already adds -L cc-terminal -f tmux.conf,
+    # so we only need "tmux new-session -A -s <name>".
+    # The delay ensures bash is fully started before tmux command arrives.
+
+    osascript <<EOF 2>/dev/null
+tell application "iTerm"
+    activate
+    tell current window
+        set newTab to (create tab with default profile)
+        tell current session of newTab
+            set name to "${session_name}"
+            write text "exec bash --rcfile '${BASH_PROFILE}'"
+            delay 0.5
+            write text "tmux new-session -A -s ${session_name}"
+        end tell
+    end tell
+end tell
+EOF
+    if [[ $? -ne 0 ]]; then
+        osascript <<EOF
+tell application "iTerm"
+    activate
+    set newWindow to (create window with default profile)
+    tell current session of newWindow
+        set name to "${session_name}"
+        write text "exec bash --rcfile '${BASH_PROFILE}'"
+        delay 0.5
+        write text "tmux new-session -A -s ${session_name}"
+    end tell
+end tell
+EOF
+    fi
+}
+
+# ==============================================================
+# PLUGIN CATALOG
+# ==============================================================
+# Format: name|package|description|args_hint
+PLUGIN_CATALOG=(
+    "filesystem|@modelcontextprotocol/server-filesystem|File system access (read/write/search)|<allowed_dir>"
+    "github|@modelcontextprotocol/server-github|GitHub issues, PRs, repos (needs GITHUB_TOKEN)|"
+    "brave-search|@modelcontextprotocol/server-brave-search|Brave web search (needs BRAVE_API_KEY)|"
+    "fetch|@anthropic-ai/mcp-server-fetch|Fetch and process web pages|"
+    "memory|@modelcontextprotocol/server-memory|Knowledge graph long-term memory|"
+    "puppeteer|@anthropic-ai/mcp-server-puppeteer|Browser automation & screenshots|"
+    "postgres|@modelcontextprotocol/server-postgres|PostgreSQL database access|<connection_string>"
+    "sqlite|@modelcontextprotocol/server-sqlite|SQLite database access|<db_path>"
+    "sequential-thinking|@modelcontextprotocol/server-sequential-thinking|Dynamic problem solving with sequential thinking|"
+)
+
+plugin_get_field() {
+    local entry="$1" field="$2"
+    echo "$entry" | cut -d'|' -f"$field"
+}
+
+list_plugins() {
+    # Read installed MCP servers directly from config files (claude mcp list hijacks terminal)
+    local installed_names=""
+    for cfg in "$HOME/.claude.json" "$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json"; do
+        if [[ -f "$cfg" ]]; then
+            local names
+            names=$(python3 -c "
+import json, sys
+try:
+    with open('$cfg') as f:
+        d = json.load(f)
+    for k in d.get('mcpServers', {}):
+        print(k)
+except: pass
+" 2>/dev/null)
+            installed_names="${installed_names}${names}"$'\n'
+        fi
+    done
+
+    echo ""
+    echo -e "  ${BOLD}Available Plugins (Claude Code MCP Servers)${NC}"
+    echo ""
+
+    for entry in "${PLUGIN_CATALOG[@]}"; do
+        local name=$(plugin_get_field "$entry" 1)
+        local desc=$(plugin_get_field "$entry" 3)
+
+        local status="${DIM}not installed${NC}"
+        if echo "$installed_names" | grep -qx "$name" 2>/dev/null; then
+            status="${GREEN}● installed${NC}"
+        fi
+
+        echo -e "  ${BOLD}${name}${NC}  ${status}"
+        echo -e "    ${DIM}${desc}${NC}"
+        echo ""
+    done
+
+    echo -e "  ${BOLD}Install:${NC}   cc-terminal plugin install <name>"
+    echo -e "  ${BOLD}Uninstall:${NC} cc-terminal plugin uninstall <name>"
+    echo ""
+}
+
+plugin_install() {
+    local target_name="$1"
+    if [[ -z "$target_name" ]]; then
+        err "Usage: cc-term plugin install <name>"
+        echo ""
+        echo "  Available: $(for e in "${PLUGIN_CATALOG[@]}"; do plugin_get_field "$e" 1; done | tr '\n' ' ')"
+        echo ""
+        return 1
+    fi
+
+    if ! command -v claude &>/dev/null; then
+        err "Claude Code CLI not found. Install it first:"
+        err "  npm install -g @anthropic-ai/claude-code"
+        return 1
+    fi
+
+    local found=""
+    for entry in "${PLUGIN_CATALOG[@]}"; do
+        local name=$(plugin_get_field "$entry" 1)
+        local package=$(plugin_get_field "$entry" 2)
+        local desc=$(plugin_get_field "$entry" 3)
+        local args_hint=$(plugin_get_field "$entry" 4)
+
+        if [[ "$name" == "$target_name" ]]; then
+            found="$entry"
+            break
+        fi
+    done
+
+    if [[ -z "$found" ]]; then
+        err "Unknown plugin: $target_name"
+        echo ""
+        echo "  Available: $(for e in "${PLUGIN_CATALOG[@]}"; do plugin_get_field "$e" 1; done | tr '\n' ' ')"
+        echo ""
+        return 1
+    fi
+
+    local name=$(plugin_get_field "$found" 1)
+    local package=$(plugin_get_field "$found" 2)
+    local args_hint=$(plugin_get_field "$found" 4)
+
+    info "Installing plugin: $name ($package)"
+
+    # Build the claude mcp add command
+    if [[ -n "$args_hint" ]]; then
+        # Plugin needs user-specified arguments
+        shift  # consume the plugin name from parent args
+        local extra_args="${*}"
+        if [[ -z "$extra_args" ]]; then
+            warn "This plugin accepts arguments: $args_hint"
+            echo ""
+            read -rp "$(echo -e "${CYAN}[cc-terminal]${NC} Enter value for ${args_hint} (or press Enter to skip): ")" user_arg
+            extra_args="$user_arg"
+        fi
+
+        if [[ -n "$extra_args" ]]; then
+            claude mcp add "$name" -s user -- npx -y "$package" $extra_args
+        else
+            claude mcp add "$name" -s user -- npx -y "$package"
+        fi
+    else
+        claude mcp add "$name" -s user -- npx -y "$package"
+    fi
+
+    if [[ $? -eq 0 ]]; then
+        ok "Plugin '$name' installed."
+
+        # Post-install hints
+        case "$name" in
+            github)
+                warn "Set GITHUB_TOKEN for full access:"
+                echo "  export GITHUB_TOKEN=ghp_xxxx"
+                ;;
+            brave-search)
+                warn "Set BRAVE_API_KEY for search access:"
+                echo "  export BRAVE_API_KEY=BSA_xxxx"
+                ;;
+        esac
+    else
+        err "Failed to install plugin '$name'."
+    fi
+}
+
+plugin_uninstall() {
+    local target_name="$1"
+    if [[ -z "$target_name" ]]; then
+        err "Usage: cc-term plugin uninstall <name>"
+        return 1
+    fi
+
+    if ! command -v claude &>/dev/null; then
+        err "Claude Code CLI not found."
+        return 1
+    fi
+
+    info "Uninstalling plugin: $target_name"
+    claude mcp remove "$target_name" -s user
+
+    if [[ $? -eq 0 ]]; then
+        ok "Plugin '$target_name' uninstalled."
+    else
+        err "Failed to uninstall plugin '$target_name'."
+    fi
+}
+
+
+# ==============================================================
+# PARSE COMMANDS
+# ==============================================================
+case "${1:-}" in
+
+    # ---- Help ----
+    -h|--help)
+        usage
+        exit 0
+        ;;
+
+    # ---- List sessions ----
+    ls|-ls)
+        echo ""
+
+        # Get tmux sessions
+        TMUX_OUTPUT=$(tmux -L cc-terminal list-sessions -F "#{session_name}:#{session_windows}:#{session_attached}" 2>/dev/null)
+        if [[ -z "$TMUX_OUTPUT" ]]; then
+            warn "No cc-terminal tmux sessions running."
+            echo ""
+            exit 0
+        fi
+
+        # Try to get remote backends from proxy
+        PROXY_PORT=9999
+        BACKENDS_JSON=$(python3 -c "
+import http.client, json, sys
+try:
+    conn = http.client.HTTPConnection('localhost', ${PROXY_PORT}, timeout=2)
+    conn.request('GET', '/api/backends')
+    resp = conn.getresponse()
+    if resp.status == 200:
+        print(resp.read().decode())
+    else:
+        print('{}')
+    conn.close()
+except:
+    print('{}')
+" 2>/dev/null)
+
+        LOCAL_IP=$(get_local_ip)
+
+        # Build a map: label → URL
+        declare -A REMOTE_URLS
+        if [[ -n "$BACKENDS_JSON" && "$BACKENDS_JSON" != "{}" ]]; then
+            while IFS= read -r line; do
+                token=$(echo "$line" | cut -d'|' -f1)
+                label=$(echo "$line" | cut -d'|' -f2)
+                if [[ -n "$token" && -n "$label" ]]; then
+                    REMOTE_URLS["$label"]="http://${LOCAL_IP}:${PROXY_PORT}/?token=${token}"
+                fi
+            done < <(python3 -c "
+import json, sys
+try:
+    data = json.loads('''${BACKENDS_JSON}''')
+    for token, info in data.items():
+        print(f\"{token}|{info.get('label', '')}\")
+except:
+    pass
+" 2>/dev/null)
+        fi
+
+        # Try to get registered sessions from proxy
+        SESSION_JSON=$(python3 -c "
+import http.client
+try:
+    conn = http.client.HTTPConnection('localhost', ${PROXY_PORT}, timeout=2)
+    conn.request('GET', '/api/sessions')
+    resp = conn.getresponse()
+    if resp.status == 200:
+        print(resp.read().decode())
+    else:
+        print('[]')
+    conn.close()
+except:
+    print('[]')
+" 2>/dev/null)
+
+        declare -A SESSION_URLS
+        if [[ -n "$SESSION_JSON" && "$SESSION_JSON" != "[]" ]]; then
+            while IFS= read -r line; do
+                name=$(echo "$line" | cut -d'|' -f1)
+                proxy_path=$(echo "$line" | cut -d'|' -f2-)
+                if [[ -n "$name" && -n "$proxy_path" ]]; then
+                    SESSION_URLS["$name"]="http://${LOCAL_IP}:${PROXY_PORT}${proxy_path}"
+                fi
+            done < <(python3 -c "
+import json
+try:
+    data = json.loads('''${SESSION_JSON}''')
+    for item in data:
+        if item.get('proxy_path'):
+            print('%s|%s' % (item.get('name', ''), item.get('proxy_path', '')))
+except:
+    pass
+" 2>/dev/null)
+        fi
+
+        # Display sessions
+        info "Sessions:"
+        echo ""
+        while IFS= read -r line; do
+            name=$(echo "$line" | cut -d: -f1)
+            windows=$(echo "$line" | cut -d: -f2)
+            attached=$(echo "$line" | cut -d: -f3)
+
+            status="${DIM}detached${NC}"
+            [[ "$attached" != "0" ]] && status="${GREEN}attached${NC}"
+
+            remote_info=""
+            # Check if this session or "all" has a remote URL
+            if [[ -n "${REMOTE_URLS[$name]:-}" ]]; then
+                remote_info="  ${CYAN}${REMOTE_URLS[$name]}${NC}"
+            elif [[ -n "${REMOTE_URLS[all]:-}" ]]; then
+                remote_info="  ${CYAN}${REMOTE_URLS[all]}${NC}"
+            fi
+
+            if [[ -n "${SESSION_URLS[$name]:-}" ]]; then
+                local kind_label=""
+                kind_label=$(python3 -c "
+import json
+try:
+    data = json.loads('''${SESSION_JSON}''')
+    for item in data:
+        if item.get('name') == '$name':
+            print(item.get('kind', 'ttyd'))
+            break
+except: print('ttyd')
+" 2>/dev/null)
+                [[ -z "$kind_label" ]] && kind_label="ttyd"
+                remote_info="${remote_info}  ${GREEN}[${kind_label}]${NC} ${CYAN}${SESSION_URLS[$name]}${NC}"
+            fi
+
+            echo -e "  ${BOLD}${name}${NC}  (${windows} windows, ${status})${remote_info}"
+        done <<< "$TMUX_OUTPUT"
+        echo ""
+        ;;
+
+    # ---- Delete session ----
+    delete|-delete)
+        shift
+        delete_session "${1:-}"
+        ;;
+
+    # ---- Save state ----
+    save)
+        require_config
+        python3 "$STATE_MANAGER" save
+        ;;
+
+    # ---- Recover state ----
+    recover)
+        require_config
+
+        if [[ ! -d "/Applications/iTerm.app" ]]; then
+            err "iTerm2 not found. Please run install.sh first."
+            exit 1
+        fi
+
+        # Run recover and capture output
+        output=$(python3 "$STATE_MANAGER" recover)
+        echo "$output" | grep -v "^__RESTORED__:"
+
+        # Extract restored session names and open iTerm2 tabs
+        restored=$(echo "$output" | grep "^__RESTORED__:" | sed 's/^__RESTORED__://')
+        if [[ -n "$restored" ]]; then
+            echo ""
+            info "Opening iTerm2 tabs..."
+            IFS=',' read -ra sessions <<< "$restored"
+            for sname in "${sessions[@]}"; do
+                open_iterm_tab "$sname"
+                ok "  Opened tab: $sname"
+                sleep 0.5
+            done
+            echo ""
+            ok "All sessions recovered and opened in iTerm2."
+        fi
+        ;;
+
+    # ---- Show saved state ----
+    show)
+        python3 "$STATE_MANAGER" show
+        ;;
+
+    # ---- Update ----
+    update)
+        echo ""
+        info "Updating cc-terminal components..."
+        echo ""
+
+        # 1. Claude Code CLI
+        echo -e "  ${BOLD}[1/4] Claude Code CLI${NC}"
+        if command -v claude &>/dev/null; then
+            current_ver=$(claude --version 2>/dev/null || echo "unknown")
+            info "  Current version: $current_ver"
+            if command -v npm &>/dev/null; then
+                npm update -g @anthropic-ai/claude-code 2>&1 | sed 's/^/        /'
+                new_ver=$(claude --version 2>/dev/null || echo "unknown")
+                ok "  Updated: $new_ver"
+            else
+                warn "  npm not found — skipping (install Node.js first)"
+            fi
+        else
+            warn "  Claude Code not installed."
+            echo "  Install: npm install -g @anthropic-ai/claude-code"
+        fi
+        echo ""
+
+        # 2. Brew packages
+        echo -e "  ${BOLD}[2/4] Brew packages${NC}"
+        BREW_PKGS=(bash tmux vim bat btop duf tig lazygit qrencode)
+        outdated=$(brew outdated --formula 2>/dev/null)
+        need_update=()
+        for pkg in "${BREW_PKGS[@]}"; do
+            if echo "$outdated" | grep -q "^$pkg$"; then
+                need_update+=("$pkg")
+            fi
+        done
+        if [[ ${#need_update[@]} -gt 0 ]]; then
+            info "  Upgrading: ${need_update[*]}"
+            brew upgrade "${need_update[@]}" 2>&1 | sed 's/^/        /'
+            ok "  Brew packages updated."
+        else
+            ok "  All brew packages up to date."
+        fi
+        echo ""
+
+        # 3. Tmux plugins (TPM)
+        echo -e "  ${BOLD}[3/4] Tmux plugins${NC}"
+        TPM_DIR="$CC_HOME/tmux/plugins/tpm"
+        if [[ -d "$TPM_DIR" ]]; then
+            TMUX_PLUGIN_MANAGER_PATH="$CC_HOME/tmux/plugins" \
+                "$TPM_DIR/bin/update_plugins" all 2>&1 | sed 's/^/        /'
+            ok "  Tmux plugins updated."
+        else
+            warn "  TPM not found — run install.sh to set up."
+        fi
+        echo ""
+
+        # 4. cc-terminal configs
+        echo -e "  ${BOLD}[4/4] cc-terminal configs${NC}"
+        # Check if source directory is accessible
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+        SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
+        if [[ -f "$SOURCE_DIR/install.sh" ]]; then
+            info "  Re-deploying configs from $SOURCE_DIR ..."
+            cp "$SOURCE_DIR/config/bash_profile" "$CC_HOME/config/bash_profile" 2>/dev/null && ok "  bash_profile"
+            cp "$SOURCE_DIR/config/tmux.conf"    "$CC_HOME/config/tmux.conf"    2>/dev/null && ok "  tmux.conf"
+            cp "$SOURCE_DIR/config/vimrc"        "$CC_HOME/config/vimrc"        2>/dev/null && ok "  vimrc"
+            cp "$SOURCE_DIR/config/remote/index.html" "$CC_HOME/config/remote/index.html" 2>/dev/null && ok "  remote/index.html"
+            mkdir -p "$CC_HOME/config/tmate" 2>/dev/null
+            cp "$SOURCE_DIR/config/tmate/index.html" "$CC_HOME/config/tmate/index.html" 2>/dev/null && ok "  tmate/index.html"
+            cp "$SOURCE_DIR/config/tmate/tmate.conf" "$CC_HOME/config/tmate/tmate.conf" 2>/dev/null && ok "  tmate/tmate.conf"
+            cp "$SOURCE_DIR/bin/cc-terminal"     "$CC_HOME/bin/cc-terminal"     2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-term"         "$CC_HOME/bin/cc-term"         2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-remote-server.py"  "$CC_HOME/bin/cc-remote-server.py"  2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-relay-server.py"   "$CC_HOME/bin/cc-relay-server.py"   2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-proxy-server.py"    "$CC_HOME/bin/cc-proxy-server.py"   2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-state-manager.py"  "$CC_HOME/bin/cc-state-manager.py"  2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-provider-manager.py" "$CC_HOME/bin/cc-provider-manager.py" 2>/dev/null
+            # Update provider scripts
+            for script in "$SOURCE_DIR"/providers/*.sh; do
+                [[ -f "$script" ]] && cp "$script" "$CC_HOME/providers/" 2>/dev/null
+            done
+            chmod +x "$CC_HOME/bin/cc-terminal" "$CC_HOME/bin/cc-term"
+            ok "  Configs re-deployed."
+        else
+            warn "  Source directory not found (standalone install). Configs unchanged."
+        fi
+
+        echo ""
+        ok "Update complete!"
+        echo ""
+        ;;
+
+    # ---- Plugins list ----
+    plugins)
+        list_plugins
+        ;;
+
+    # ---- Plugin install / uninstall ----
+    plugin)
+        shift
+        action="${1:-}"
+        shift 2>/dev/null
+        plugin_name="${1:-}"
+
+        case "$action" in
+            install)
+                shift 2>/dev/null
+                plugin_install "$plugin_name" "$@"
+                ;;
+            uninstall|remove)
+                plugin_uninstall "$plugin_name"
+                ;;
+            *)
+                err "Usage: cc-term plugin [install|uninstall] <name>"
+                echo ""
+                echo "  List plugins: cc-term plugins"
+                ;;
+        esac
+        ;;
+
+    # ---- Provider management ----
+    provider)
+        shift
+        sub="${1:-}"
+
+        case "$sub" in
+            ""|-ls|list|ls)
+                python3 "$PROVIDER_MANAGER" list
+                ;;
+            -new|new|install|add)
+                shift
+                python3 "$PROVIDER_MANAGER" new "$@"
+                ;;
+            -edit|edit)
+                shift
+                python3 "$PROVIDER_MANAGER" edit "$@"
+                ;;
+            -delete|delete|uninstall|remove)
+                shift
+                python3 "$PROVIDER_MANAGER" delete "$@"
+                ;;
+            env)
+                shift
+                python3 "$PROVIDER_MANAGER" env "$@"
+                ;;
+            identifiers)
+                python3 "$PROVIDER_MANAGER" identifiers
+                ;;
+            seed)
+                python3 "$PROVIDER_MANAGER" seed
+                ;;
+            *)
+                python3 "$PROVIDER_MANAGER" set-default "$sub"
+                ;;
+        esac
+        ;;
+
+    # ---- Proxy server (gateway) ----
+    -server)
+        shift
+        sub="${1:-}"
+        SERVER_PORT=9999
+
+        # ---- -server -stop ----
+        if [[ "$sub" == "-stop" ]]; then
+            stopped=0
+            for pid_file in "$REMOTE_PID_DIR"/remote*.pid "$REMOTE_PID_DIR"/relay.pid "$REMOTE_PID_DIR"/proxy.pid; do
+                [[ -f "$pid_file" ]] || continue
+                PID=$(cat "$pid_file")
+                label=$(basename "$pid_file" .pid)
+                [[ "$label" == "remote" ]] && label="remote-server"
+                if kill -0 "$PID" 2>/dev/null; then
+                    kill "$PID"
+                    rm -f "$pid_file"
+                    ok "Stopped: $label (PID: $PID)"
+                    stopped=1
+                else
+                    rm -f "$pid_file"
+                fi
+            done
+            for meta_file in "$REMOTE_PID_DIR"/ttyd-*.json; do
+                [[ -f "$meta_file" ]] || continue
+                session_name=$(META_FILE="$meta_file" python3 -c "
+import json, os
+try:
+    with open(os.environ['META_FILE']) as f:
+        print(json.load(f).get('session_name', ''))
+except Exception:
+    print('')
+")
+                [[ -n "$session_name" ]] && stop_ttyd_registration "$session_name" "$SERVER_PORT"
+                stopped=1
+            done
+            if [[ "$stopped" -eq 0 ]]; then
+                warn "Nothing running."
+            fi
+            rm -f "$PRIVATE_SESSIONS_FILE"
+            exit 0
+        fi
+
+        # ---- -server [--port] [--token] [-b] ----
+        SERVER_PORT=9999
+        SERVER_TOKEN=""
+        BACKGROUND=0
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --port) shift; SERVER_PORT="${1:-9999}" ;;
+                --token) shift; SERVER_TOKEN="${1:-}" ;;
+                -b) BACKGROUND=1 ;;
+                *) warn "Unknown flag: $1" ;;
+            esac
+            shift
+        done
+
+        LOCAL_IP=$(get_local_ip)
+        mkdir -p "$REMOTE_PID_DIR"
+
+        TOKEN_ARGS=""
+        [[ -n "$SERVER_TOKEN" ]] && TOKEN_ARGS="--token $SERVER_TOKEN"
+
+        python3 "$PROXY_SERVER" \
+            --port "$SERVER_PORT" \
+            --html "$CC_HOME/config/tmate/index.html" \
+            $TOKEN_ARGS &
+        PROXY_PID=$!
+        echo "$PROXY_PID" > "$REMOTE_PID_DIR/proxy.pid"
+
+        sleep 1
+
+        if ! kill -0 "$PROXY_PID" 2>/dev/null; then
+            err "Failed to start proxy server."
+            exit 1
+        fi
+
+        echo ""
+        echo -e "  ${GREEN}${BOLD}Proxy server is running${NC}"
+        echo ""
+        echo -e "  ${BOLD}Port:${NC}   ${SERVER_PORT}"
+        echo -e "  ${BOLD}PID:${NC}    ${PROXY_PID}"
+        if [[ -n "$SERVER_TOKEN" ]]; then
+            echo -e "  ${BOLD}Token:${NC}  ${SERVER_TOKEN}"
+        else
+            echo -e "  ${BOLD}Token:${NC}  ${DIM}(none)${NC}"
+        fi
+        echo ""
+        echo -e "  ${DIM}Waiting for cc-terminal -r to register sessions...${NC}"
+        echo -e "  Stop with: ${BOLD}cc-terminal -server -stop${NC}"
+        echo ""
+
+        if [[ "$BACKGROUND" -eq 0 ]]; then
+            # Foreground: wait, Ctrl-C kills it
+            wait "$PROXY_PID" 2>/dev/null
+        fi
+        ;;
+
+    # ---- Remote access ----
+    -r)
+        require_config
+        shift
+        SESSIONS="${1:-}"
+
+        LOCAL_IP=$(get_local_ip)
+        PROXY_PORT=9999
+        REGISTERED_COUNT=0
+
+        while IFS= read -r session_name; do
+            [[ -z "$session_name" ]] && continue
+            if register_ttyd_session "$session_name" "$PROXY_PORT" "$LOCAL_IP"; then
+                REGISTERED_COUNT=$((REGISTERED_COUNT + 1))
+                echo ""
+                echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${session_name}${NC}"
+                echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
+            else
+                warn "Could not register session '$session_name' (is 'cc-terminal -server' running?)"
+            fi
+        done < <(list_target_sessions "$SESSIONS")
+
+        if [[ "$REGISTERED_COUNT" -eq 0 ]]; then
+            err "No sessions were registered."
+            exit 1
+        fi
+
+        echo ""
+        echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
+        echo ""
+        if [[ "$REGISTERED_COUNT" -eq 1 ]]; then
+            show_qr "$TTYD_REGISTERED_URL"
+        else
+            show_qr "$TTYD_AGGREGATE_URL"
+        fi
+        echo -e "  Open the URL on your device."
+        echo -e "  Stop with: ${BOLD}cc-terminal -server -stop${NC}"
+        echo ""
+        ;;
+
+    # ---- Open with name or default (with optional -r/-q/-s flags) ----
+    *)
+        require_config
+        SESSION_NAME="${1:-main}"
+
+        if [[ ! -d "/Applications/iTerm.app" ]]; then
+            err "iTerm2 not found. Please run install.sh first."
+            exit 1
+        fi
+
+        # Parse remaining flags
+        shift 2>/dev/null || true
+        OPT_REMOTE=0
+        OPT_QUIET=0
+        OPT_PRIVATE=0
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                -r) OPT_REMOTE=1 ;;
+                -q) OPT_QUIET=1 ;;
+                -s) OPT_PRIVATE=1 ;;
+                *)  warn "Unknown flag: $1" ;;
+            esac
+            shift
+        done
+
+        open_iterm_tab "$SESSION_NAME"
+
+        if [[ "$OPT_REMOTE" -eq 1 ]]; then
+            echo ""
+            info "Registering session on proxy page: $SESSION_NAME"
+
+            PROXY_PORT=9999
+            LOCAL_IP=$(get_local_ip)
+
+            if [[ "$OPT_PRIVATE" -eq 1 ]]; then
+                add_private_session "$SESSION_NAME"
+                info "Session '$SESSION_NAME' marked as private (hidden from global page)"
+            fi
+
+            if register_ttyd_session "$SESSION_NAME" "$PROXY_PORT" "$LOCAL_IP"; then
+                echo ""
+                echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
+                echo -e "  ${BOLD}Page:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
+                echo ""
+                if [[ "$OPT_QUIET" -ne 1 ]]; then
+                    show_qr "$TTYD_REGISTERED_URL"
+                fi
+            else
+                warn "Could not register with proxy (is 'cc-terminal -server' running?)"
+            fi
+        fi
+        ;;
+esac

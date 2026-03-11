@@ -1,0 +1,263 @@
+# ============================================================
+# cc-terminal bash profile
+# Isolated environment — does NOT affect your global config
+# ============================================================
+
+CC_HOME="$HOME/.cc-terminal"
+CC_PROVIDER_MANAGER="$CC_HOME/bin/cc-provider-manager.py"
+
+# ----------------------------------------------------------
+# Homebrew
+# ----------------------------------------------------------
+if [[ -f /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv bash)"
+elif [[ -f /usr/local/bin/brew ]]; then
+    eval "$(/usr/local/bin/brew shellenv bash)"
+fi
+
+# ----------------------------------------------------------
+# PATH: add cc-terminal bin
+# ----------------------------------------------------------
+export PATH="$CC_HOME/bin:$HOME/.local/bin:$HOME/bin:$PATH"
+
+# ----------------------------------------------------------
+# Editor
+# ----------------------------------------------------------
+export EDITOR="vim"
+export VISUAL="vim"
+
+# ----------------------------------------------------------
+# Vim: use isolated vimrc
+# ----------------------------------------------------------
+export VIMINIT="source $CC_HOME/config/vimrc"
+
+# ----------------------------------------------------------
+# Tmux: alias to use isolated config
+# ----------------------------------------------------------
+alias tmux="tmux -L cc-terminal -f $CC_HOME/config/tmux.conf"
+
+# ----------------------------------------------------------
+# Tool aliases (only active in cc-terminal)
+# ----------------------------------------------------------
+alias cat="bat --paging=never"
+alias top="btop"
+alias df="duf"
+alias ls="ls --color"
+
+# ----------------------------------------------------------
+# Prompt
+# ----------------------------------------------------------
+PS1='\u@ \[\033[01;34m\]\w\[\033[00m\] \$ '
+
+# ----------------------------------------------------------
+# History
+# ----------------------------------------------------------
+export HISTSIZE=10000
+export HISTFILESIZE=20000
+export HISTFILE="$CC_HOME/.bash_history"
+export HISTCONTROL=ignoredups:erasedups
+shopt -s histappend
+
+# ----------------------------------------------------------
+# Shell options
+# ----------------------------------------------------------
+shopt -s checkwinsize
+shopt -s cdspell
+shopt -s dirspell 2>/dev/null
+
+# ----------------------------------------------------------
+# Git 快捷命令
+# ----------------------------------------------------------
+gb() {
+    git branch
+}
+
+push() {
+    local branch
+    branch=$(git branch --show-current)
+    if [[ -z "$branch" ]]; then
+        echo "错误: 不在 git 仓库中或没有当前分支"
+        return 1
+    fi
+    echo "推送分支 $branch 到 origin..."
+    git push origin "$branch" "$@"
+}
+
+pull() {
+    local branch
+    branch=$(git branch --show-current)
+    if [[ -z "$branch" ]]; then
+        echo "错误: 不在 git 仓库中或没有当前分支"
+        return 1
+    fi
+    echo "从 origin 拉取分支 $branch..."
+    git pull origin "$branch" "$@"
+}
+
+alias gd="git diff"
+alias gs="git status"
+alias gl="tig"
+alias lg="lazygit"
+alias ll="ls -alFh"
+
+# ----------------------------------------------------------
+# Tmux 快捷命令
+# ----------------------------------------------------------
+alias tls='tmux ls'
+alias tn='tmux new -s'
+alias tx='tmux attach -t'
+alias tk='tmux kill-session -t'
+
+# ----------------------------------------------------------
+# Claude Code 快捷命令
+# ----------------------------------------------------------
+ccs() {
+    local provider_name=""
+    local env_exports=""
+
+    unset ANTHROPIC_DEFAULT_OPUS_MODEL
+
+    if [[ $# -gt 0 && "$1" != -* ]]; then
+        provider_name="$1"
+        shift
+    fi
+
+    if [[ ! -f "$CC_PROVIDER_MANAGER" ]]; then
+        echo "未找到 provider manager: $CC_PROVIDER_MANAGER"
+        return 1
+    fi
+
+    if ! env_exports=$(python3 "$CC_PROVIDER_MANAGER" env "${provider_name:-default}" 2>/dev/null); then
+        echo "未找到可用 provider。先执行: cc-term -provider -new -api <url> -key <key> [-name <name>]"
+        return 1
+    fi
+
+    eval "$env_exports"
+
+    if [[ -n "$CC_PROVIDER_NAME" ]]; then
+        echo "使用 provider: $CC_PROVIDER_NAME"
+    fi
+
+    if [[ "${1:-}" == "-c" ]]; then
+        shift
+        claude --dangerously-skip-permissions --continue "$@"
+    else
+        claude --dangerously-skip-permissions "$@"
+    fi
+}
+
+# ----------------------------------------------------------
+# Bash completion for cc-term / cc-terminal
+# ----------------------------------------------------------
+_cc_term_provider_identifiers() {
+    python3 "$CC_PROVIDER_MANAGER" identifiers 2>/dev/null
+}
+
+_cc_term_session_names() {
+    command tmux -L cc-terminal list-sessions -F '#{session_name}' 2>/dev/null
+}
+
+_cc_term_complete() {
+    local cur prev first second third
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    first="${COMP_WORDS[1]:-}"
+    second="${COMP_WORDS[2]:-}"
+    third="${COMP_WORDS[3]:-}"
+
+    local root_opts="-ls -new -delete -provider -server save recover update plugins plugin -h"
+    local provider_opts="-ls -new -edit -delete"
+    local provider_fields="-name -api -key -appId"
+    local session_flags="-r -q -s"
+    local provider_ids
+    local session_names
+
+    provider_ids="$(_cc_term_provider_identifiers | tr '\n' ' ')"
+    session_names="$(_cc_term_session_names | tr '\n' ' ')"
+
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$root_opts" -- "$cur") )
+        return
+    fi
+
+    if [[ "$first" == "-provider" ]]; then
+        if [[ $COMP_CWORD -eq 2 ]]; then
+            COMPREPLY=( $(compgen -W "$provider_opts" -- "$cur") )
+            return
+        fi
+
+        case "$second" in
+            -ls)
+                COMPREPLY=()
+                return
+                ;;
+            -new)
+                if [[ "$prev" == "-name" || "$prev" == "-api" || "$prev" == "-key" || "$prev" == "-appId" ]]; then
+                    COMPREPLY=()
+                    return
+                fi
+                COMPREPLY=( $(compgen -W "$provider_fields" -- "$cur") )
+                return
+                ;;
+            -edit)
+                if [[ $COMP_CWORD -eq 3 ]]; then
+                    COMPREPLY=( $(compgen -W "$provider_ids" -- "$cur") )
+                    return
+                fi
+                if [[ "$prev" == "-name" || "$prev" == "-api" || "$prev" == "-key" || "$prev" == "-appId" || "$prev" == "-edit" ]]; then
+                    COMPREPLY=()
+                    return
+                fi
+                COMPREPLY=( $(compgen -W "$provider_fields" -- "$cur") )
+                return
+                ;;
+            -delete)
+                if [[ $COMP_CWORD -eq 3 ]]; then
+                    COMPREPLY=( $(compgen -W "$provider_ids" -- "$cur") )
+                else
+                    COMPREPLY=()
+                fi
+                return
+                ;;
+        esac
+    fi
+
+    if [[ "$first" == "-delete" ]]; then
+        COMPREPLY=( $(compgen -W "$session_names" -- "$cur") )
+        return
+    fi
+
+    if [[ "$first" == "-new" ]]; then
+        if [[ $COMP_CWORD -ge 3 ]]; then
+            COMPREPLY=( $(compgen -W "$session_flags" -- "$cur") )
+        else
+            COMPREPLY=()
+        fi
+        return
+    fi
+
+    if [[ "$first" != -* ]]; then
+        COMPREPLY=( $(compgen -W "$session_flags" -- "$cur") )
+        return
+    fi
+
+    COMPREPLY=()
+}
+
+complete -F _cc_term_complete cc-term
+complete -F _cc_term_complete cc-terminal
+
+# ----------------------------------------------------------
+# Welcome
+# ----------------------------------------------------------
+echo ""
+echo -e "\033[0;36m  ╔═══════════════════════════════════════╗\033[0m"
+echo -e "\033[0;36m  ║         cc-terminal  ready            ║\033[0m"
+echo -e "\033[0;36m  ║  Terminal: iTerm2  |  Shell: Bash     ║\033[0m"
+echo -e "\033[0;36m  ║  Editor: Vim  |  Multiplexer: Tmux   ║\033[0m"
+echo -e "\033[0;36m  ╚═══════════════════════════════════════╝\033[0m"
+echo ""
+echo -e "  \033[0;33mbat\033[0m (cat)  \033[0;33mbtop\033[0m (top)  \033[0;33mduf\033[0m (df)  \033[0;33mtig\033[0m (git log)  \033[0;33mlazygit\033[0m (git)"
+echo -e "  \033[0;33mimgcat\033[0m <file>  — view images in terminal"
+echo -e "  \033[0;33mcc-term\033[0m -new main  \033[0;33mcc-term\033[0m -provider -ls  \033[0;33mccs\033[0m <provider-name>"
+echo ""

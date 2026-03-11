@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>cc-terminal</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,system-ui,sans-serif;touch-action:manipulation}
+
+/* ---- Top bar ---- */
+#topbar{display:flex;align-items:center;height:40px;background:#0d0d1a;border-bottom:1px solid #2a2a4a;padding:0 8px;flex-shrink:0;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#topbar::-webkit-scrollbar{display:none}
+.tab{padding:4px 12px;border-radius:4px;font-size:13px;white-space:nowrap;cursor:pointer;background:#1a1a2e;color:#8888aa;border:1px solid #2a2a4a;transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent}
+.tab.active{background:#5b9bd5;color:#fff;border-color:#5b9bd5}
+.tab:hover{background:#2a2a4a}
+#status{margin-left:auto;font-size:11px;white-space:nowrap;flex-shrink:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.dot.on{background:#27ae60}.dot.off{background:#e74c3c}
+
+/* ---- Session panel ---- */
+#session-panel{display:none;position:absolute;top:40px;left:0;right:0;bottom:0;z-index:100;background:rgba(13,13,26,0.97);padding:20px;overflow-y:auto}
+#session-panel.show{display:block}
+#session-panel h2{font-size:18px;margin-bottom:16px;color:#5b9bd5}
+.session-card{padding:14px 16px;margin-bottom:10px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:8px;cursor:pointer;transition:all .15s}
+.session-card:hover,.session-card:active{border-color:#5b9bd5;background:#1e1e3a}
+.session-card .name{font-size:16px;font-weight:600;color:#e0e0e0}
+.session-card .meta{font-size:12px;color:#6a6a8a;margin-top:4px}
+
+/* ---- Terminal ---- */
+#terminal-wrap{flex:1;overflow:hidden;position:relative}
+#terminal{height:100%;width:100%}
+
+/* ---- Toolbar (virtual keys) ---- */
+#toolbar{display:flex;flex-wrap:wrap;gap:4px;padding:6px 6px;background:#0d0d1a;border-top:1px solid #2a2a4a;flex-shrink:0}
+.key{flex:0 0 auto;padding:8px 10px;font-size:13px;font-family:monospace;background:#1e1e3a;color:#ccc;border:1px solid #2a2a4a;border-radius:4px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;text-align:center;min-width:36px;transition:background .1s}
+.key:active{background:#5b9bd5;color:#fff}
+.key.wide{flex:1;min-width:50px}
+.key.accent{background:#27ae60;color:#fff;border-color:#27ae60}
+
+/* ---- Tip banner ---- */
+#tip{padding:8px 12px;background:#1e2a1e;color:#7ec87e;font-size:12px;text-align:center;flex-shrink:0;cursor:pointer;border-top:1px solid #2a4a2a}
+#tip span{text-decoration:underline}
+
+/* ---- Layout ---- */
+#app{display:flex;flex-direction:column;height:100%;width:100%;position:fixed;top:0;left:0;right:0;bottom:0}
+
+/* ---- PC: hide toolbar on wide screens ---- */
+@media(min-width:900px){
+  #toolbar{padding:4px 6px}
+  .key{padding:5px 8px;font-size:12px;min-width:30px}
+}
+
+/* ---- Window tabs ---- */
+#wintabs{display:flex;gap:3px;overflow-x:auto;flex-shrink:0}
+#wintabs::-webkit-scrollbar{display:none}
+.wintab{padding:3px 10px;font-size:12px;border-radius:3px;cursor:pointer;white-space:nowrap;background:transparent;color:#6a6a8a;user-select:none;-webkit-tap-highlight-color:transparent}
+.wintab.active{color:#5b9bd5;font-weight:600}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="tab active" id="btn-sessions" onclick="toggleSessions()">Sessions</div>
+    <div id="wintabs"></div>
+    <div id="status"><span class="dot off" id="dot"></span><span id="status-text">connecting...</span></div>
+  </div>
+
+  <div id="session-panel">
+    <h2>Select a session</h2>
+    <div id="session-list"><div class="session-card" onclick="connectSession('')"><div class="name">New Shell</div><div class="meta">Start a new bash session</div></div></div>
+  </div>
+
+  <div id="terminal-wrap">
+    <div id="terminal"></div>
+  </div>
+
+  <div id="toolbar">
+    <div class="key" onclick="sendKey('\x1b')">Esc</div>
+    <div class="key" onclick="sendKey('\t')">Tab</div>
+    <div class="key accent" id="ctrl-btn" onclick="toggleCtrl()">Ctrl</div>
+    <div class="key" onclick="sendKey('\x01')">C-a</div>
+    <div class="key" onclick="sendKey('\x03')">C-c</div>
+    <div class="key" onclick="sendKey('\x04')">C-d</div>
+    <div class="key" onclick="sendKey('\x1a')">C-z</div>
+    <div class="key" onclick="sendKey('\x1b[A')">↑</div>
+    <div class="key" onclick="sendKey('\x1b[B')">↓</div>
+    <div class="key" onclick="sendKey('\x1b[D')">←</div>
+    <div class="key" onclick="sendKey('\x1b[C')">→</div>
+    <div class="key" onclick="sendKey('\x1bOP')">F1</div>
+    <div class="key" onclick="sendKey('\x1b[15~')">F5</div>
+    <div class="key" onclick="sendKey('\x1b[17~')">F6</div>
+    <div class="key" onclick="sendKey('\x1b[23~')">F11</div>
+    <div class="key" onclick="sendKey('\x1b[24~')">F12</div>
+  </div>
+
+  <div id="tip" onclick="this.style.display='none'">
+    Mobile tip: use <span>WeChat voice input</span> for faster text entry. Tap to dismiss.
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+<script>
+(function(){
+  // ---- Extract token from URL ----
+  const params = new URLSearchParams(location.search);
+  const TOKEN = params.get('token') || '';
+
+  // ---- State ----
+  let ws = null;
+  let connected = false;
+  let ctrlMode = false;
+  let currentSession = '';
+  let windowPollTimer = null;
+
+  // ---- Terminal setup ----
+  const term = new Terminal({
+    cursorBlink: true,
+    fontSize: /Mobi|Android/i.test(navigator.userAgent) ? 14 : 15,
+    fontFamily: '"Menlo", "Monaco", "Courier New", monospace',
+    theme: {
+      background: '#1a1a2e',
+      foreground: '#e0e0e0',
+      cursor: '#5b9bd5',
+      selectionBackground: 'rgba(91,155,213,0.3)',
+      black: '#1a1a2e',
+      brightBlack: '#4a4a6a'
+    },
+    allowProposedApi: true,
+    scrollback: 5000
+  });
+
+  const fitAddon = new FitAddon.FitAddon();
+  const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(webLinksAddon);
+  term.open(document.getElementById('terminal'));
+
+  function fitTerminal() {
+    try { fitAddon.fit(); } catch(e) {}
+  }
+
+  fitTerminal();
+  window.addEventListener('resize', fitTerminal);
+  // Also re-fit when orientation changes on mobile
+  screen.orientation && screen.orientation.addEventListener('change', () => setTimeout(fitTerminal, 200));
+
+  // ---- WebSocket connection ----
+  function connect(sessionName) {
+    if (ws) { ws.close(); }
+    currentSession = sessionName || '';
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${proto}//${location.host}/ws?token=${TOKEN}&session=${encodeURIComponent(currentSession)}`;
+
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = function() {
+      connected = true;
+      document.getElementById('dot').className = 'dot on';
+      document.getElementById('status-text').textContent = currentSession || 'shell';
+      document.getElementById('session-panel').classList.remove('show');
+
+      // Send initial resize
+      sendResize(term.cols, term.rows);
+      term.focus();
+      startWindowPoll();
+    };
+
+    ws.onmessage = function(ev) {
+      if (ev.data instanceof ArrayBuffer) {
+        const data = new Uint8Array(ev.data);
+        if (data.length < 1) return;
+        // All data is terminal output
+        term.write(data);
+      }
+    };
+
+    ws.onclose = function() {
+      connected = false;
+      document.getElementById('dot').className = 'dot off';
+      document.getElementById('status-text').textContent = 'disconnected';
+      stopWindowPoll();
+      // Show session panel on disconnect
+      setTimeout(() => {
+        document.getElementById('session-panel').classList.add('show');
+        loadSessions();
+      }, 500);
+    };
+
+    ws.onerror = function() {
+      connected = false;
+    };
+  }
+
+  // ---- Send data to server ----
+  function sendInput(data) {
+    if (!ws || ws.readyState !== 1) return;
+    if (typeof data === 'string') data = new TextEncoder().encode(data);
+    const buf = new Uint8Array(1 + data.length);
+    buf[0] = 0; // type: input
+    buf.set(data, 1);
+    ws.send(buf.buffer);
+  }
+
+  function sendResize(cols, rows) {
+    if (!ws || ws.readyState !== 1) return;
+    const json = JSON.stringify({ cols, rows });
+    const encoded = new TextEncoder().encode(json);
+    const buf = new Uint8Array(1 + encoded.length);
+    buf[0] = 1; // type: resize
+    buf.set(encoded, 1);
+    ws.send(buf.buffer);
+  }
+
+  // ---- Terminal input handler ----
+  term.onData(function(data) {
+    if (ctrlMode && data.length === 1) {
+      const code = data.charCodeAt(0);
+      // a-z -> Ctrl+A to Ctrl+Z
+      if (code >= 97 && code <= 122) {
+        sendInput(String.fromCharCode(code - 96));
+        toggleCtrl();
+        return;
+      }
+      if (code >= 65 && code <= 90) {
+        sendInput(String.fromCharCode(code - 64));
+        toggleCtrl();
+        return;
+      }
+      ctrlMode = false;
+      document.getElementById('ctrl-btn').classList.remove('active');
+    }
+    sendInput(data);
+  });
+
+  term.onResize(function(size) {
+    sendResize(size.cols, size.rows);
+  });
+
+  // ---- Virtual key helpers ----
+  window.sendKey = function(seq) {
+    sendInput(seq);
+    term.focus();
+  };
+
+  window.toggleCtrl = function() {
+    ctrlMode = !ctrlMode;
+    const btn = document.getElementById('ctrl-btn');
+    if (ctrlMode) {
+      btn.style.background = '#e74c3c';
+      btn.style.borderColor = '#e74c3c';
+    } else {
+      btn.style.background = '';
+      btn.style.borderColor = '';
+    }
+    term.focus();
+  };
+
+  // ---- Session management ----
+  window.toggleSessions = function() {
+    const panel = document.getElementById('session-panel');
+    const isShown = panel.classList.contains('show');
+    if (isShown) {
+      panel.classList.remove('show');
+      term.focus();
+    } else {
+      panel.classList.add('show');
+      loadSessions();
+    }
+  };
+
+  window.connectSession = function(name) {
+    term.clear();
+    connect(name);
+  };
+
+  function loadSessions() {
+    fetch(`/api/sessions?token=${TOKEN}`)
+      .then(r => r.json())
+      .then(sessions => {
+        const list = document.getElementById('session-list');
+        let html = `<div class="session-card" onclick="connectSession('')">
+          <div class="name">+ New Shell</div>
+          <div class="meta">Start a new bash session</div>
+        </div>`;
+        sessions.forEach(s => {
+          const badge = s.attached > 0 ? ' (attached)' : '';
+          html += `<div class="session-card" onclick="connectSession('${s.name}')">
+            <div class="name">${s.name}${badge}</div>
+            <div class="meta">${s.windows} window(s)</div>
+          </div>`;
+        });
+        list.innerHTML = html;
+      })
+      .catch(() => {});
+  }
+
+  // ---- Window tabs polling ----
+  function startWindowPoll() {
+    stopWindowPoll();
+    pollWindows();
+    windowPollTimer = setInterval(pollWindows, 3000);
+  }
+
+  function stopWindowPoll() {
+    if (windowPollTimer) { clearInterval(windowPollTimer); windowPollTimer = null; }
+  }
+
+  function pollWindows() {
+    if (!currentSession) { document.getElementById('wintabs').innerHTML = ''; return; }
+    fetch(`/api/windows?token=${TOKEN}&session=${encodeURIComponent(currentSession)}`)
+      .then(r => r.json())
+      .then(windows => {
+        const container = document.getElementById('wintabs');
+        let html = '';
+        windows.forEach(w => {
+          const cls = w.active === '1' ? 'wintab active' : 'wintab';
+          html += `<div class="${cls}" onclick="switchWindow('${w.index}')">${w.index}:${w.name}</div>`;
+        });
+        container.innerHTML = html;
+      })
+      .catch(() => {});
+  }
+
+  window.switchWindow = function(index) {
+    // Send tmux command to switch window: prefix + window number
+    // Ctrl+A then the window index
+    sendInput('\x01' + index);
+    term.focus();
+    setTimeout(pollWindows, 500);
+  };
+
+  // ---- Initial load ----
+  document.getElementById('session-panel').classList.add('show');
+  loadSessions();
+})();
+</script>
+</body>
+</html>
