@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cc-terminal proxy server
+cc-term proxy server
 
 Serves an aggregate session page and routes requests to registered backends.
 Supports three registration kinds:
@@ -26,7 +26,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 WS_MAGIC = b"258EAFA5-E914-47DA-95CA-5AB9141CE108"
-TMUX_SOCKET = "cc-terminal"
+TMUX_SOCKET = "cc-term"
 
 backends = {}
 tmate_sessions = {}
@@ -237,7 +237,7 @@ class ProxyServer:
             with open(path, "r") as handle:
                 return handle.read()
         except FileNotFoundError:
-            return "<html><body><h1>cc-terminal: index not found</h1></body></html>"
+            return "<html><body><h1>cc-term: index not found</h1></body></html>"
 
     def http_response(self, status, content_type, body, extra_headers=None):
         if isinstance(body, str):
@@ -716,7 +716,7 @@ class ProxyServer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="cc-terminal proxy server")
+    parser = argparse.ArgumentParser(description="cc-term proxy server")
     parser.add_argument("--port", type=int, default=9999)
     parser.add_argument("--token", type=str, default="", help="Optional token to protect registration API")
     parser.add_argument("--html", type=str, required=True, help="Aggregate index HTML path")

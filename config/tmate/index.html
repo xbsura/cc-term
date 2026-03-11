@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>cc-terminal</title>
+    <title>cc-term</title>
     <style>
         :root {
             color-scheme: dark;
@@ -730,7 +730,7 @@
                     <span class="green"></span>
                 </div>
                 <div class="chrome-title">
-                    <h1>cc-terminal</h1>
+                    <h1>cc-term</h1>
                     <p>PC 端更像 iTerm2 本地开发；移动端保留 tmate 框架，同时增加触屏选择 session / pane 流。</p>
                 </div>
             </div>
@@ -793,7 +793,7 @@
 
                     <div id="empty-state" class="empty-state hidden">
                         <p>还没有可用会话</p>
-                        <small>先在本机运行 `cc-terminal -r &lt;name&gt;`，然后刷新本页即可。</small>
+                        <small>先在本机运行 `cc-term -r &lt;name&gt;`，然后刷新本页即可。</small>
                     </div>
 
                     <div id="mobile-sheet" class="mobile-sheet hidden">
@@ -813,9 +813,9 @@
 
     <script>
         const STORAGE_KEYS = {
-            desktopSession: 'cc-terminal.desktop.last-session.v2',
-            mobileSession: 'cc-terminal.mobile.last-session.v2',
-            mobilePanePrefix: 'cc-terminal.mobile.last-pane.v2.',
+            desktopSession: 'cc-term.desktop.last-session.v2',
+            mobileSession: 'cc-term.mobile.last-session.v2',
+            mobilePanePrefix: 'cc-term.mobile.last-pane.v2.',
         };
 
         const state = {
@@ -1011,7 +1011,7 @@
                 elements.viewerSubtitle.textContent = '读写 tmate 窗口';
                 elements.mobileHeaderTitle.textContent = '触屏选择会话';
                 elements.mobileHeaderSubtitle.textContent = '先选大的 tmux，再选小窗口';
-                document.title = 'cc-terminal';
+                document.title = 'cc-term';
                 return;
             }
 
@@ -1021,7 +1021,7 @@
                 elements.viewerSubtitle.textContent = '移动端：已切到目标 pane，并尽量只展示这个小窗口内容';
                 elements.mobileHeaderTitle.textContent = state.activeName;
                 elements.mobileHeaderSubtitle.textContent = paneText;
-                document.title = `${state.activeName} · pane ${state.activePane.pane_index} · cc-terminal`;
+                document.title = `${state.activeName} · pane ${state.activePane.pane_index} · cc-term`;
                 return;
             }
 
@@ -1031,7 +1031,7 @@
             elements.viewerSubtitle.textContent = `桌面端完整读写视图 · ${windowCount} 个 tmux window`;
             elements.mobileHeaderTitle.textContent = state.activeName;
             elements.mobileHeaderSubtitle.textContent = '当前显示完整 session';
-            document.title = `${state.activeName} · cc-terminal`;
+            document.title = `${state.activeName} · cc-term`;
         }
 
         function renderDesktopTabs() {
@@ -1093,7 +1093,7 @@
             elements.mobileBackButton.textContent = '关闭';
 
             if (!state.sessions.length) {
-                elements.mobileSheetBody.innerHTML = '<div class="mobile-note">当前没有可用会话。先在本机运行 `cc-terminal -r &lt;name&gt;`，再回来刷新。</div>';
+                elements.mobileSheetBody.innerHTML = '<div class="mobile-note">当前没有可用会话。先在本机运行 `cc-term -r &lt;name&gt;`，再回来刷新。</div>';
                 return;
             }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-cc-terminal relay server
-Proxies local connections (port 9999) to a remote cc-terminal server.
+cc-term relay server
+Proxies local connections (port 9999) to a remote cc-term server.
 Pure Python, no external dependencies.
 """
 
@@ -319,13 +319,13 @@ class RelayServer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="cc-terminal relay server")
+    parser = argparse.ArgumentParser(description="cc-term relay server")
     parser.add_argument("--local-port", type=int, default=9999)
     parser.add_argument(
         "--remote-url",
         type=str,
         required=True,
-        help="Remote cc-terminal URL (http://host:port/[?token=xxx])",
+        help="Remote cc-term URL (http://host:port/[?token=xxx])",
     )
     args = parser.parse_args()
 

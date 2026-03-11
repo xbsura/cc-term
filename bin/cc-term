@@ -2,10 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CC_HOME="${CC_HOME:-$HOME/.cc-terminal}"
-LEGACY_BIN="$SCRIPT_DIR/cc-terminal"
-if [[ ! -x "$LEGACY_BIN" && -x "$CC_HOME/bin/cc-terminal" ]]; then
-    LEGACY_BIN="$CC_HOME/bin/cc-terminal"
+CC_HOME="${CC_HOME:-$HOME/.cc-term}"
+CC_PYTHON="$CC_HOME/venv/bin/python"
+CORE_BIN="$SCRIPT_DIR/_cc-term-core"
+if [[ ! -x "$CORE_BIN" && -x "$CC_HOME/bin/_cc-term-core" ]]; then
+    CORE_BIN="$CC_HOME/bin/_cc-term-core"
 fi
 PROVIDER_MANAGER="$SCRIPT_DIR/cc-provider-manager.py"
 if [[ ! -f "$PROVIDER_MANAGER" && -f "$CC_HOME/bin/cc-provider-manager.py" ]]; then
@@ -14,84 +15,158 @@ fi
 
 usage() {
     echo ""
-    echo "cc-term — macOS iTerm2 + tmux toolkit"
+    echo "cc-term — The best Claude Code CLI dev tool for macOS"
     echo ""
-    echo "  cc-term -ls"
-    echo "  cc-term -new <name> [-r] [-q] [-s]"
-    echo "  cc-term <name> [-r] [-q] [-s]"
-    echo "  cc-term -delete <name>"
+    echo "Usage:"
+    echo "  cc-term [-new] <name> [-r|-q|-s]  Open a session in a new iTerm2 tab"
+    echo "  cc-term -ls                       List all sessions"
+    echo "  cc-term -delete <name>            Kill and remove a session"
     echo ""
-    echo "  cc-term -provider -ls"
-    echo "  cc-term -provider -new [-name <name>] -api <url> -key <key> [-appId <appId>]"
-    echo "  cc-term -provider -edit <index|name|key> [-name <name>] [-api <url>] [-key <key>] [-appId <appId>]"
-    echo "  cc-term -provider -delete <index|name|key>"
+    echo "  cc-term -p -ls                    List all Claude Code providers"
+    echo "  cc-term -p -new -api <url> -key <key> [-name <n>] [-appId <id>]"
+    echo "  cc-term -p -edit <id> [fields]    Edit a provider"
+    echo "  cc-term -p -delete <id>           Remove a provider"
     echo ""
-    echo "  直接写 cc-term <name> 等价于 cc-term -new <name>"
+    echo "  cc-term -h                        Show this help"
+    echo "  cc-term -hh                       Show detailed help"
+    echo ""
+}
+
+usage_detailed() {
+    echo ""
+    echo "cc-term — The best Claude Code CLI dev tool for macOS"
+    echo ""
+    echo "SESSIONS"
+    echo "  cc-term [-new] <name>       Open a new iTerm2 tab with an isolated tmux session."
+    echo "                              If the session exists, reattach to it."
+    echo "  cc-term <name> -r           Also register the session for remote web access."
+    echo "  cc-term <name> -q           Quiet mode — skip QR code display."
+    echo "  cc-term <name> -s           Private — hide session from the aggregate page."
+    echo "  cc-term -ls                 List all active sessions with status and remote URLs."
+    echo "  cc-term -delete <name>      Kill a session and clean up its remote registration."
+    echo ""
+    echo "PROVIDERS (Claude Code API proxies)"
+    echo "  cc-term -p|-provider -ls    List all providers with health check and quota."
+    echo "  cc-term -p -new -api <url> -key <key> [-name <name>] [-appId <id>]"
+    echo "                              Add a new Claude Code API provider."
+    echo "  cc-term -p -edit <id> [-name <n>] [-api <url>] [-key <key>] [-appId <id>]"
+    echo "                              Edit a provider. <id> = index, name, or key prefix."
+    echo "  cc-term -p -delete <id>     Remove a provider."
+    echo ""
+    echo "CCS (Claude Code launcher)"
+    echo "  ccs [<provider>]            Launch Claude Code with provider info and quota."
+    echo "  ccs <provider> -c           Launch with --continue (resume last conversation)."
+    echo "  ccs -ls                     List all providers (same as cc-term -p -ls)."
+    echo "  ccs -new / -edit / -delete  Manage providers (same as cc-term -p ...)."
+    echo "  ccs -h                      Show ccs help."
+    echo ""
+    echo "REMOTE ACCESS"
+    echo "  cc-term -server             Start the aggregate proxy page (port 9999)."
+    echo "  cc-term -server -stop       Stop proxy server and all remote registrations."
+    echo "  cc-term -r <name>           Register session(s) for web terminal access via ttyd."
+    echo ""
+    echo "STATE"
+    echo "  cc-term save                Save all tmux sessions, windows, and panes."
+    echo "  cc-term recover             Restore saved sessions and reopen iTerm2 tabs."
+    echo ""
+    echo "PLUGINS (Claude Code MCP servers)"
+    echo "  cc-term plugins             List available MCP server plugins."
+    echo "  cc-term plugin install <n>  Install an MCP server plugin."
+    echo "  cc-term plugin uninstall <n>"
+    echo "                              Remove an MCP server plugin."
+    echo ""
+    echo "UPDATE"
+    echo "  cc-term update              Update CLI, brew packages, tmux plugins, and configs."
+    echo ""
+    echo "INCLUDED TOOLS"
+    echo "  bat         Modern cat with syntax highlighting"
+    echo "  btop        Interactive process viewer (replaces top)"
+    echo "  duf         Disk usage utility (replaces df)"
+    echo "  tig         Text-mode git log viewer"
+    echo "  lazygit     Terminal UI for git"
+    echo "  imgcat      Display images in iTerm2"
+    echo "  qrencode    Generate QR codes for remote URLs"
+    echo "  tmux        Terminal multiplexer (isolated socket & config)"
+    echo "  vim         Text editor (isolated config)"
+    echo ""
+    echo "CONFIG FILES"
+    echo "  ~/.cc-term/config/bash_profile   Shell profile (PATH, aliases, prompt, ccs)"
+    echo "  ~/.cc-term/config/tmux.conf      Tmux config (keybindings, status bar, plugins)"
+    echo "  ~/.cc-term/config/vimrc          Vim config (appearance, indentation, keymaps)"
+    echo "  ~/.cc-term/providers.json        Saved Claude Code API providers"
+    echo "  ~/.cc-term/state/snapshot.json   Saved session state (for save/recover)"
+    echo ""
+    echo "  All configs are yours to customize. Edit them directly — they won't be"
+    echo "  overwritten unless you run install.sh or cc-term update again."
+    echo "  Your global shell, vim, and tmux configs are NOT modified."
     echo ""
 }
 
 if [[ $# -eq 0 ]]; then
-    exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN"
+    exec env CC_TERM_NAME="cc-term" "$CORE_BIN"
 fi
 
 case "$1" in
     -h|--help)
         usage
         ;;
+    -hh)
+        usage_detailed
+        ;;
     -ls)
         shift
-        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" ls "$@"
+        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" ls "$@"
         ;;
     -new)
         shift
         if [[ $# -lt 1 ]]; then
-            echo "缺少 session 名称"
+            echo "Missing session name"
             usage
             exit 1
         fi
         session_name="$1"
         shift
-        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" "$session_name" "$@"
+        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" "$session_name" "$@"
         ;;
     -delete)
         shift
         if [[ $# -lt 1 ]]; then
-            echo "缺少 session 名称"
+            echo "Missing session name"
             usage
             exit 1
         fi
-        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" delete "$1"
+        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" delete "$1"
         ;;
-    -provider)
+    -provider|-p)
         shift
         sub="${1:-}"
         case "$sub" in
             ""|-ls)
-                exec python3 "$PROVIDER_MANAGER" list
+                exec "$CC_PYTHON" "$PROVIDER_MANAGER" list
                 ;;
             -new)
                 shift
-                exec python3 "$PROVIDER_MANAGER" new "$@"
+                exec "$CC_PYTHON" "$PROVIDER_MANAGER" new "$@"
                 ;;
             -edit)
                 shift
-                exec python3 "$PROVIDER_MANAGER" edit "$@"
+                exec "$CC_PYTHON" "$PROVIDER_MANAGER" edit "$@"
                 ;;
             -delete)
                 shift
-                exec python3 "$PROVIDER_MANAGER" delete "$@"
+                exec "$CC_PYTHON" "$PROVIDER_MANAGER" delete "$@"
                 ;;
             *)
-                exec python3 "$PROVIDER_MANAGER" set-default "$sub"
+                exec "$CC_PYTHON" "$PROVIDER_MANAGER" set-default "$sub"
                 ;;
         esac
         ;;
     *)
         if [[ "$1" == -* ]]; then
-            exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" "$@"
+            exec env CC_TERM_NAME="cc-term" "$CORE_BIN" "$@"
         fi
         session_name="$1"
         shift
-        exec env CC_TERM_NAME="cc-term" "$LEGACY_BIN" "$session_name" "$@"
+        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" "$session_name" "$@"
         ;;
 esac

@@ -2,12 +2,20 @@
 set -euo pipefail
 
 # ============================================================
-# cc-terminal installer
+# cc-term installer
 # A curated terminal environment for AI-powered coding on macOS
 # ============================================================
 
-CC_HOME="$HOME/.cc-terminal"
+CC_HOME="$HOME/.cc-term"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FORCE_INSTALL=false
+
+# Parse arguments
+for arg in "$@"; do
+    if [[ "$arg" == "-f" || "$arg" == "--force" ]]; then
+        FORCE_INSTALL=true
+    fi
+done
 
 # Colors
 RED='\033[0;31m'
@@ -16,16 +24,16 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-info()  { echo -e "${CYAN}[cc-terminal]${NC} $*"; }
-ok()    { echo -e "${GREEN}[cc-terminal]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[cc-terminal]${NC} $*"; }
-err()   { echo -e "${RED}[cc-terminal]${NC} $*" >&2; }
+info()  { echo -e "${CYAN}[cc-term]${NC} $*"; }
+ok()    { echo -e "${GREEN}[cc-term]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[cc-term]${NC} $*"; }
+err()   { echo -e "${RED}[cc-term]${NC} $*" >&2; }
 
 # ----------------------------------------------------------
 # 1. Pre-flight checks
 # ----------------------------------------------------------
 if [[ "$(uname)" != "Darwin" ]]; then
-    err "cc-terminal is designed for macOS only."
+    err "cc-term is designed for macOS only."
     exit 1
 fi
 
@@ -47,7 +55,7 @@ brew_run() {
 if ! command -v brew &>/dev/null && [[ ! -f /opt/homebrew/bin/brew ]] && [[ ! -f /usr/local/bin/brew ]]; then
     warn "Homebrew is not installed."
     echo ""
-    read -rp "$(echo -e "${CYAN}[cc-terminal]${NC} Install Homebrew now? [Y/n] ")" answer
+    read -rp "$(echo -e "${CYAN}[cc-term]${NC} Install Homebrew now? [Y/n] ")" answer
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy]$ ]]; then
         info "Installing Homebrew..."
@@ -82,17 +90,61 @@ else
 fi
 
 # --- Formulae ---
-FORMULAE=(bash tmux vim bat btop duf tig lazygit qrencode)
+FORMULAE=(bash tmux vim bat btop duf tig lazygit qrencode python@3)
+
+# Map package names to binary names for fast detection
+declare -A PKG_TO_BIN=(
+    ["python@3"]="python3"
+)
 
 info "Installing formulae..."
 for pkg in "${FORMULAE[@]}"; do
-    if brew_run list "$pkg" &>/dev/null; then
-        ok "  $pkg (already installed)"
+    bin_name="${PKG_TO_BIN[$pkg]:-$pkg}"
+
+    if [[ "$FORCE_INSTALL" == "true" ]]; then
+        if brew_run list "$pkg" &>/dev/null; then
+            ok "  $pkg (already installed)"
+        else
+            info "  Installing $pkg..."
+            brew_run install "$pkg" || warn "  $pkg install failed, skipping."
+        fi
     else
-        info "  Installing $pkg..."
-        brew_run install "$pkg" || warn "  $pkg install failed, skipping."
+        if command -v "$bin_name" &>/dev/null; then
+            ok "  $pkg (already installed)"
+        else
+            info "  Installing $pkg..."
+            brew_run install "$pkg" || warn "  $pkg install failed, skipping."
+        fi
     fi
 done
+
+# ----------------------------------------------------------
+# 3.1 Detect brew prefix and Python path
+# ----------------------------------------------------------
+BREW_PREFIX="$(brew_run --prefix)"
+BREW_PYTHON3="${BREW_PREFIX}/bin/python3"
+if [[ ! -x "$BREW_PYTHON3" ]]; then
+    # Fallback: find python3 from brew's python@3 package
+    BREW_PYTHON3="$(brew_run --prefix python@3)/bin/python3"
+fi
+if [[ ! -x "$BREW_PYTHON3" ]]; then
+    err "python3 not found in brew. Please run: brew install python@3"
+    exit 1
+fi
+ok "Using Python: $BREW_PYTHON3"
+
+# ----------------------------------------------------------
+# 3.2 Create isolated Python venv
+# ----------------------------------------------------------
+CC_VENV="$CC_HOME/venv"
+CC_PYTHON="$CC_VENV/bin/python"
+if [[ ! -f "$CC_PYTHON" ]]; then
+    info "Creating Python venv at $CC_VENV ..."
+    "$BREW_PYTHON3" -m venv "$CC_VENV"
+    ok "Python venv created."
+else
+    ok "Python venv already exists."
+fi
 
 # ----------------------------------------------------------
 # 4. Install imgcat (iTerm2 shell utility)
@@ -141,7 +193,7 @@ cp "$SCRIPT_DIR/config/tmate/index.html" "$CC_HOME/config/tmate/index.html"
 cp "$SCRIPT_DIR/config/tmate/tmate.conf" "$CC_HOME/config/tmate/tmate.conf"
 
 # Copy launchers and servers
-cp "$SCRIPT_DIR/bin/cc-terminal" "$CC_HOME/bin/cc-terminal"
+cp "$SCRIPT_DIR/bin/_cc-term-core" "$CC_HOME/bin/_cc-term-core"
 cp "$SCRIPT_DIR/bin/cc-term" "$CC_HOME/bin/cc-term"
 cp "$SCRIPT_DIR/bin/cc-remote-server.py" "$CC_HOME/bin/cc-remote-server.py"
 cp "$SCRIPT_DIR/bin/cc-relay-server.py" "$CC_HOME/bin/cc-relay-server.py"
@@ -149,7 +201,7 @@ cp "$SCRIPT_DIR/bin/cc-proxy-server.py" "$CC_HOME/bin/cc-proxy-server.py"
 cp "$SCRIPT_DIR/bin/cc-tmate-manager.py" "$CC_HOME/bin/cc-tmate-manager.py"
 cp "$SCRIPT_DIR/bin/cc-state-manager.py" "$CC_HOME/bin/cc-state-manager.py"
 cp "$SCRIPT_DIR/bin/cc-provider-manager.py" "$CC_HOME/bin/cc-provider-manager.py"
-chmod +x "$CC_HOME/bin/cc-terminal" "$CC_HOME/bin/cc-term"
+chmod +x "$CC_HOME/bin/_cc-term-core" "$CC_HOME/bin/cc-term"
 
 # Deploy provider scripts
 mkdir -p "$CC_HOME/providers"
@@ -172,7 +224,7 @@ if [[ -f "$CC_HOME/providers.json" ]]; then
 else
     info "No providers.json yet — add one later with: cc-term -provider -new ..."
 fi
-python3 "$CC_HOME/bin/cc-provider-manager.py" seed >/dev/null 2>&1 || true
+"$CC_PYTHON" "$CC_HOME/bin/cc-provider-manager.py" seed >/dev/null 2>&1 || true
 
 # ----------------------------------------------------------
 # 8. Install tmux plugins via TPM
@@ -181,29 +233,20 @@ info "Installing tmux plugins..."
 TMUX_PLUGIN_MANAGER_PATH="$CC_HOME/tmux/plugins" "$TPM_DIR/bin/install_plugins" || warn "TPM plugin install skipped (tmux may not be running)."
 
 # ----------------------------------------------------------
-# 9. Create symlinks in /usr/local/bin
+# 9. Create symlinks in brew prefix bin
 # ----------------------------------------------------------
-PRIMARY_LINK="/usr/local/bin/cc-term"
-LEGACY_LINK="/usr/local/bin/cc-terminal"
+BREW_BIN="${BREW_PREFIX}/bin"
+PRIMARY_LINK="${BREW_BIN}/cc-term"
 
-mkdir -p /usr/local/bin 2>/dev/null || true
-for link_target in "$PRIMARY_LINK" "$LEGACY_LINK"; do
-    if [[ -L "$link_target" || -f "$link_target" ]]; then
-        rm -f "$link_target"
-    fi
-done
+if [[ -L "$PRIMARY_LINK" || -f "$PRIMARY_LINK" ]]; then
+    rm -f "$PRIMARY_LINK"
+fi
 
 if ln -sf "$CC_HOME/bin/cc-term" "$PRIMARY_LINK" 2>/dev/null; then
     ok "Symlinked cc-term -> $PRIMARY_LINK"
 else
-    warn "Could not create symlink at $PRIMARY_LINK (may need sudo)."
+    warn "Could not create symlink at $PRIMARY_LINK."
     warn "You can run cc-term directly: $CC_HOME/bin/cc-term"
-fi
-
-if ln -sf "$CC_HOME/bin/cc-terminal" "$LEGACY_LINK" 2>/dev/null; then
-    ok "Compatibility symlinked cc-terminal -> $LEGACY_LINK"
-else
-    warn "Could not create compatibility symlink at $LEGACY_LINK."
 fi
 
 # ----------------------------------------------------------
@@ -211,15 +254,27 @@ fi
 # ----------------------------------------------------------
 echo ""
 ok "============================================"
-ok " cc-terminal installed successfully!"
+ok " cc-term installed successfully!"
 ok "============================================"
 echo ""
-info "Launch with:  cc-term"
-info "Named tab:   cc-term -new <name>"
-info "Remote:      cc-term <name> -r"
-info "Providers:   cc-term -provider -ls"
-info "Config dir:  $CC_HOME"
+info "List with:         cc-term -ls"
+info "Launch with:       cc-term"
+info "Named tab:         cc-term [-new] <name>"
+info "Remote:            cc-term <name> -r"
+info "List Providers:    cc-term -p -ls"
+info "Add Providers:     cc-term -p -new -api <url> -key <key>"
+info "Config dir:        ~/.cc-term"
 echo ""
-info "Your global shell/vim/tmux configs are NOT modified."
-info "All cc-terminal settings are isolated under $CC_HOME."
+
+# ----------------------------------------------------------
+# Auto-reload if running inside cc-term
+# ----------------------------------------------------------
+if [[ -n "${CC_TERM_PROFILE_LOADED:-}" ]]; then
+    # shellcheck disable=SC1091
+    source "$CC_HOME/config/bash_profile"
+    ok "Auto backup & recovery enabled..."
+    echo ""
+fi
+
+info "Enjoy your CC coding journey 🚀"
 echo ""

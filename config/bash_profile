@@ -1,9 +1,10 @@
 # ============================================================
-# cc-terminal bash profile
+# cc-term bash profile
 # Isolated environment — does NOT affect your global config
 # ============================================================
 
-CC_HOME="$HOME/.cc-terminal"
+CC_HOME="$HOME/.cc-term"
+CC_PYTHON="$CC_HOME/venv/bin/python"
 CC_PROVIDER_MANAGER="$CC_HOME/bin/cc-provider-manager.py"
 
 # ----------------------------------------------------------
@@ -16,7 +17,7 @@ elif [[ -f /usr/local/bin/brew ]]; then
 fi
 
 # ----------------------------------------------------------
-# PATH: add cc-terminal bin
+# PATH: add cc-term bin
 # ----------------------------------------------------------
 export PATH="$CC_HOME/bin:$HOME/.local/bin:$HOME/bin:$PATH"
 
@@ -34,10 +35,10 @@ export VIMINIT="source $CC_HOME/config/vimrc"
 # ----------------------------------------------------------
 # Tmux: alias to use isolated config
 # ----------------------------------------------------------
-alias tmux="tmux -L cc-terminal -f $CC_HOME/config/tmux.conf"
+alias tmux="tmux -L cc-term -f $CC_HOME/config/tmux.conf"
 
 # ----------------------------------------------------------
-# Tool aliases (only active in cc-terminal)
+# Tool aliases (only active in cc-term)
 # ----------------------------------------------------------
 alias cat="bat --paging=never"
 alias top="btop"
@@ -109,9 +110,46 @@ alias tx='tmux attach -t'
 alias tk='tmux kill-session -t'
 
 # ----------------------------------------------------------
-# Claude Code 快捷命令
+# Claude Code shortcuts
 # ----------------------------------------------------------
 ccs() {
+    # --- Management subcommands ---
+    case "${1:-}" in
+        -ls)
+            "$CC_PYTHON" "$CC_PROVIDER_MANAGER" list
+            return
+            ;;
+        -new)
+            shift
+            "$CC_PYTHON" "$CC_PROVIDER_MANAGER" new "$@"
+            return
+            ;;
+        -edit)
+            shift
+            "$CC_PYTHON" "$CC_PROVIDER_MANAGER" edit "$@"
+            return
+            ;;
+        -delete)
+            shift
+            "$CC_PYTHON" "$CC_PROVIDER_MANAGER" delete "$@"
+            return
+            ;;
+        -h|--help)
+            echo ""
+            echo "ccs — Launch Claude Code with a provider"
+            echo ""
+            echo "  ccs [<provider>]         Launch Claude Code (show provider & quota)"
+            echo "  ccs <provider> -c        Launch with --continue"
+            echo "  ccs -ls                  List all providers"
+            echo "  ccs -new -api <url> -key <key> [-name <n>] [-appId <id>]"
+            echo "  ccs -edit <id> [fields]  Edit a provider"
+            echo "  ccs -delete <id>         Remove a provider"
+            echo ""
+            return
+            ;;
+    esac
+
+    # --- Launch mode ---
     local provider_name=""
     local env_exports=""
 
@@ -123,20 +161,22 @@ ccs() {
     fi
 
     if [[ ! -f "$CC_PROVIDER_MANAGER" ]]; then
-        echo "未找到 provider manager: $CC_PROVIDER_MANAGER"
+        echo "Provider manager not found: $CC_PROVIDER_MANAGER"
         return 1
     fi
 
-    if ! env_exports=$(python3 "$CC_PROVIDER_MANAGER" env "${provider_name:-default}" 2>/dev/null); then
-        echo "未找到可用 provider。先执行: cc-term -provider -new -api <url> -key <key> [-name <name>]"
+    if ! env_exports=$("$CC_PYTHON" "$CC_PROVIDER_MANAGER" env "${provider_name:-default}" 2>/dev/null); then
+        echo -e "\033[1;33m[cc-term]\033[0m No providers configured."
+        echo -e "\033[0;36m[cc-term]\033[0m Add one: cc-term -provider -new -api <url> -key <key> [-name <name>] [-appId <appId>]"
         return 1
     fi
 
     eval "$env_exports"
 
-    if [[ -n "$CC_PROVIDER_NAME" ]]; then
-        echo "使用 provider: $CC_PROVIDER_NAME"
-    fi
+    # Startup banner with quota
+    echo ""
+    "$CC_PYTHON" "$CC_PROVIDER_MANAGER" startup-info "${provider_name:-default}" 2>/dev/null
+    echo ""
 
     if [[ "${1:-}" == "-c" ]]; then
         shift
@@ -147,14 +187,14 @@ ccs() {
 }
 
 # ----------------------------------------------------------
-# Bash completion for cc-term / cc-terminal
+# Bash completion for cc-term / cc-term
 # ----------------------------------------------------------
 _cc_term_provider_identifiers() {
-    python3 "$CC_PROVIDER_MANAGER" identifiers 2>/dev/null
+    "$CC_PYTHON" "$CC_PROVIDER_MANAGER" identifiers 2>/dev/null
 }
 
 _cc_term_session_names() {
-    command tmux -L cc-terminal list-sessions -F '#{session_name}' 2>/dev/null
+    command tmux -L cc-term list-sessions -F '#{session_name}' 2>/dev/null
 }
 
 _cc_term_complete() {
@@ -165,7 +205,7 @@ _cc_term_complete() {
     second="${COMP_WORDS[2]:-}"
     third="${COMP_WORDS[3]:-}"
 
-    local root_opts="-ls -new -delete -provider -server save recover update plugins plugin -h"
+    local root_opts="-ls -new -delete -provider -p -server save recover update plugins plugin -h -hh"
     local provider_opts="-ls -new -edit -delete"
     local provider_fields="-name -api -key -appId"
     local session_flags="-r -q -s"
@@ -180,7 +220,7 @@ _cc_term_complete() {
         return
     fi
 
-    if [[ "$first" == "-provider" ]]; then
+    if [[ "$first" == "-provider" || "$first" == "-p" ]]; then
         if [[ $COMP_CWORD -eq 2 ]]; then
             COMPREPLY=( $(compgen -W "$provider_opts" -- "$cur") )
             return
@@ -245,19 +285,76 @@ _cc_term_complete() {
 }
 
 complete -F _cc_term_complete cc-term
-complete -F _cc_term_complete cc-terminal
+
+_ccs_complete() {
+    local cur prev first
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    first="${COMP_WORDS[1]:-}"
+
+    local ccs_opts="-ls -new -edit -delete -h"
+    local provider_fields="-name -api -key -appId"
+    local provider_ids
+    provider_ids="$(_cc_term_provider_identifiers | tr '\n' ' ')"
+
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$ccs_opts $provider_ids" -- "$cur") )
+        return
+    fi
+
+    case "$first" in
+        -new)
+            if [[ "$prev" == "-name" || "$prev" == "-api" || "$prev" == "-key" || "$prev" == "-appId" ]]; then
+                COMPREPLY=()
+            else
+                COMPREPLY=( $(compgen -W "$provider_fields" -- "$cur") )
+            fi
+            return
+            ;;
+        -edit)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$provider_ids" -- "$cur") )
+            elif [[ "$prev" == "-name" || "$prev" == "-api" || "$prev" == "-key" || "$prev" == "-appId" ]]; then
+                COMPREPLY=()
+            else
+                COMPREPLY=( $(compgen -W "$provider_fields" -- "$cur") )
+            fi
+            return
+            ;;
+        -delete)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$provider_ids" -- "$cur") )
+            fi
+            return
+            ;;
+    esac
+
+    COMPREPLY=()
+}
+
+complete -F _ccs_complete ccs
+
+# ----------------------------------------------------------
+# Auto-source in tmux if not already loaded
+# ----------------------------------------------------------
+if [[ -n "$TMUX" && -z "$CC_TERM_PROFILE_LOADED" ]]; then
+    export CC_TERM_PROFILE_LOADED=1
+fi
 
 # ----------------------------------------------------------
 # Welcome
 # ----------------------------------------------------------
-echo ""
-echo -e "\033[0;36m  ╔═══════════════════════════════════════╗\033[0m"
-echo -e "\033[0;36m  ║         cc-terminal  ready            ║\033[0m"
-echo -e "\033[0;36m  ║  Terminal: iTerm2  |  Shell: Bash     ║\033[0m"
-echo -e "\033[0;36m  ║  Editor: Vim  |  Multiplexer: Tmux   ║\033[0m"
-echo -e "\033[0;36m  ╚═══════════════════════════════════════╝\033[0m"
-echo ""
-echo -e "  \033[0;33mbat\033[0m (cat)  \033[0;33mbtop\033[0m (top)  \033[0;33mduf\033[0m (df)  \033[0;33mtig\033[0m (git log)  \033[0;33mlazygit\033[0m (git)"
-echo -e "  \033[0;33mimgcat\033[0m <file>  — view images in terminal"
-echo -e "  \033[0;33mcc-term\033[0m -new main  \033[0;33mcc-term\033[0m -provider -ls  \033[0;33mccs\033[0m <provider-name>"
-echo ""
+if [[ -z "$CC_TERM_PROFILE_LOADED" ]]; then
+    export CC_TERM_PROFILE_LOADED=1
+    echo ""
+    echo -e "\033[0;36m  ╔═══════════════════════════════════════╗\033[0m"
+    echo -e "\033[0;36m  ║         cc-term  ready            ║\033[0m"
+    echo -e "\033[0;36m  ║  Terminal: iTerm2  |  Shell: Bash     ║\033[0m"
+    echo -e "\033[0;36m  ║  Editor: Vim  |  Multiplexer: Tmux   ║\033[0m"
+    echo -e "\033[0;36m  ╚═══════════════════════════════════════╝\033[0m"
+    echo ""
+    echo -e "  \033[0;33mbat\033[0m (cat)  \033[0;33mbtop\033[0m (top)  \033[0;33mduf\033[0m (df)  \033[0;33mtig\033[0m (git log)  \033[0;33mlazygit\033[0m (git)"
+    echo -e "  \033[0;33mimgcat\033[0m <file>  — view images in terminal"
+    echo -e "  \033[0;33mcc-term\033[0m -new main  \033[0;33mcc-term\033[0m -provider -ls  \033[0;33mccs\033[0m <provider-name>"
+    echo ""
+fi

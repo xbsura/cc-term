@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cc-terminal state manager — save and restore tmux sessions.
+cc-term state manager — save and restore tmux sessions.
 Pure Python, no external dependencies.
 """
 
@@ -10,11 +10,11 @@ import subprocess
 import sys
 from datetime import datetime
 
-CC_HOME = os.path.expanduser("~/.cc-terminal")
+CC_HOME = os.path.expanduser("~/.cc-term")
 STATE_DIR = os.path.join(CC_HOME, "state")
 STATE_FILE = os.path.join(STATE_DIR, "snapshot.json")
 TMUX_CONF = os.path.join(CC_HOME, "config/tmux.conf")
-TMUX_SOCKET = "cc-terminal"
+TMUX_SOCKET = "cc-term"
 
 # Colors
 C = "\033[0;36m"
@@ -24,10 +24,10 @@ R = "\033[0;31m"
 B = "\033[1m"
 NC = "\033[0m"
 
-def info(msg):  print(f"{C}[cc-terminal]{NC} {msg}")
-def ok(msg):    print(f"{G}[cc-terminal]{NC} {msg}")
-def warn(msg):  print(f"{Y}[cc-terminal]{NC} {msg}")
-def err(msg):   print(f"{R}[cc-terminal]{NC} {msg}", file=sys.stderr)
+def info(msg):  print(f"{C}[cc-term]{NC} {msg}")
+def ok(msg):    print(f"{G}[cc-term]{NC} {msg}")
+def warn(msg):  print(f"{Y}[cc-term]{NC} {msg}")
+def err(msg):   print(f"{R}[cc-term]{NC} {msg}", file=sys.stderr)
 
 
 def run_tmux(*args, check=False):
@@ -174,7 +174,7 @@ def save():
 def recover():
     """Restore tmux sessions from the saved snapshot."""
     if not os.path.exists(STATE_FILE):
-        err("No saved state found. Run 'cc-terminal save' first.")
+        err("No saved state found. Run 'cc-term save' first.")
         return False
 
     with open(STATE_FILE, "r") as f:
@@ -317,7 +317,7 @@ def _create_panes_target(session, win_idx, window, fallback_cwd, skip_first=Fals
 def show():
     """Display the saved snapshot info."""
     if not os.path.exists(STATE_FILE):
-        warn("No saved state. Run 'cc-terminal save' first.")
+        warn("No saved state. Run 'cc-term save' first.")
         return
 
     with open(STATE_FILE, "r") as f:

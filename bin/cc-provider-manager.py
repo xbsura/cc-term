@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cc-terminal provider manager
+cc-term provider manager
 Manage Claude Code API proxy providers — health, quota, install, edit, default.
 """
 
@@ -15,7 +15,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-CC_HOME = os.path.expanduser(os.environ.get("CC_HOME", "~/.cc-terminal"))
+CC_HOME = os.path.expanduser(os.environ.get("CC_HOME", "~/.cc-term"))
 PROVIDERS_FILE = os.path.join(CC_HOME, "providers.json")
 PROVIDER_ENV_FILE = os.path.join(CC_HOME, "provider_env.sh")
 PROVIDERS_SCRIPTS_DIR = os.path.join(CC_HOME, "providers")
@@ -30,19 +30,19 @@ NC = "\033[0m"
 
 
 def info(msg):
-    print(f"{C}[cc-terminal]{NC} {msg}")
+    print(f"{C}[cc-term]{NC} {msg}")
 
 
 def ok(msg):
-    print(f"{G}[cc-terminal]{NC} {msg}")
+    print(f"{G}[cc-term]{NC} {msg}")
 
 
 def warn(msg):
-    print(f"{Y}[cc-terminal]{NC} {msg}")
+    print(f"{Y}[cc-term]{NC} {msg}")
 
 
 def err(msg):
-    print(f"{R}[cc-terminal]{NC} {msg}", file=sys.stderr)
+    print(f"{R}[cc-term]{NC} {msg}", file=sys.stderr)
 
 
 # ================================================================
@@ -228,11 +228,7 @@ def _next_provider_name(data):
 def _quota_display(quota):
     if not quota:
         return None
-    remaining = quota.get("remaining", "unknown")
-    today = quota.get("today_tokens", "unknown")
-    total_cost = quota.get("total_cost", "unknown")
-    model_usage = quota.get("model_usage", "")
-    return remaining, today, total_cost, model_usage
+    return quota
 
 
 # ================================================================
@@ -402,12 +398,35 @@ def list_providers(with_health=True):
             print(f"       {D}appId: {NC}{app_id}")
 
         if with_health and script:
-            quota_display = _quota_display(check_quota_via_script(provider))
-            if quota_display:
-                remaining, today, total_cost, model_usage = quota_display
-                print(f"       {D}Remaining:{NC} {remaining}  {D}Today:{NC} {today}  {D}Total:{NC} {total_cost}")
-                if model_usage:
-                    print(f"       {D}Models:{NC} {model_usage}")
+            quota = check_quota_via_script(provider)
+            if quota:
+                key_name = quota.get("key_name", "")
+                permissions = quota.get("permissions", "")
+                expires_at = quota.get("expires_at", "")
+                quota_table = quota.get("quota_table", "")
+                model_usage = quota.get("model_usage", "")
+
+                # key info line
+                key_info_parts = []
+                if key_name:
+                    key_info_parts.append(f"{D}Key:{NC} {G}{key_name}{NC}")
+                if permissions:
+                    key_info_parts.append(f"{D}Models:{NC} {C}{permissions}{NC}")
+                if expires_at:
+                    expire_color = R if "EXPIRED" in expires_at else Y
+                    key_info_parts.append(f"{D}Expires:{NC} {expire_color}{expires_at}{NC}")
+                if key_info_parts:
+                    print(f"       {'  '.join(key_info_parts)}")
+
+                # quota limits table
+                if quota_table:
+                    print()
+                    print(quota_table)
+
+                # model usage table
+                if model_usage and model_usage != "unknown":
+                    print()
+                    print(model_usage)
         print()
 
     if default_name:
@@ -569,6 +588,53 @@ def seed():
     return 0
 
 
+def print_startup_info(identifier="default"):
+    """Print provider info + quota for ccs startup banner."""
+    data = load_providers()
+    index = _resolve_index(data, identifier)
+    if index is None:
+        return 1
+    provider = data["providers"][index]
+
+    key = provider.get("key", "")
+    key_display = key[:10] + "..." + key[-4:] if len(key) > 14 else key
+
+    script = find_provider_script(provider["api"])
+    support_tag = f" {C}[SUPPORTED]{NC}" if script else ""
+
+    print(f"{C}[cc-term]{NC} Provider: {B}{provider['name']}{NC}{support_tag}")
+    print(f"{C}[cc-term]{NC} URL: {D}{provider['api']}{NC}")
+    print(f"{C}[cc-term]{NC} Key: {D}{key_display}{NC}")
+
+    quota = check_quota_via_script(provider)
+    if quota:
+        key_name = quota.get("key_name", "")
+        permissions = quota.get("permissions", "")
+        expires_at = quota.get("expires_at", "")
+        quota_table = quota.get("quota_table", "")
+        model_usage = quota.get("model_usage", "")
+
+        # key info
+        if key_name:
+            print(f"{C}[cc-term]{NC} {Y}Key Name:{NC} {G}{key_name}{NC}")
+        if permissions:
+            print(f"{C}[cc-term]{NC} {Y}Models:{NC} {C}{permissions}{NC}")
+        if expires_at:
+            expire_color = R if "EXPIRED" in expires_at else Y
+            print(f"{C}[cc-term]{NC} {Y}Expires:{NC} {expire_color}{expires_at}{NC}")
+
+        # quota limits table
+        if quota_table:
+            print()
+            print(quota_table)
+
+        # model usage table
+        if model_usage and model_usage != "unknown":
+            print()
+            print(model_usage)
+    return 0
+
+
 # ================================================================
 # MAIN
 # ================================================================
@@ -627,6 +693,10 @@ def main():
 
     if action == "seed":
         return seed()
+
+    if action == "startup-info":
+        identifier = args[1] if len(args) > 1 else "default"
+        return print_startup_info(identifier)
 
     return set_default(action)
 

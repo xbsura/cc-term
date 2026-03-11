@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cc-terminal remote server
+cc-term remote server
 Pure Python WebSocket terminal server (no external dependencies).
 Serves a mobile-optimized web terminal that connects to tmux sessions.
 """
@@ -111,7 +111,7 @@ class RemoteTerminalServer:
             with open(path, "r") as f:
                 return f.read()
         except FileNotFoundError:
-            return "<html><body><h1>cc-terminal: index.html not found</h1></body></html>"
+            return "<html><body><h1>cc-term: index.html not found</h1></body></html>"
 
     def _get_excluded_sessions(self):
         """Read excluded session names from file (re-read each time for live updates)."""
@@ -128,7 +128,7 @@ class RemoteTerminalServer:
         try:
             import subprocess
             result = subprocess.run(
-                ["tmux", "-L", "cc-terminal", "list-sessions", "-F", "#{session_name}:#{session_windows}:#{session_attached}"],
+                ["tmux", "-L", "cc-term", "list-sessions", "-F", "#{session_name}:#{session_windows}:#{session_attached}"],
                 capture_output=True, text=True, timeout=5
             )
             if result.returncode != 0:
@@ -160,7 +160,7 @@ class RemoteTerminalServer:
         try:
             import subprocess
             result = subprocess.run(
-                ["tmux", "-L", "cc-terminal", "list-windows", "-t", session_name, "-F",
+                ["tmux", "-L", "cc-term", "list-windows", "-t", session_name, "-F",
                  "#{window_index}:#{window_name}:#{window_active}"],
                 capture_output=True, text=True, timeout=5
             )
@@ -313,10 +313,10 @@ class RemoteTerminalServer:
             env["CC_REMOTE"] = "1"
 
             if session_name:
-                # Attach to specific tmux session (cc-terminal socket)
-                tmux_conf = os.path.expanduser("~/.cc-terminal/config/tmux.conf")
+                # Attach to specific tmux session (cc-term socket)
+                tmux_conf = os.path.expanduser("~/.cc-term/config/tmux.conf")
                 os.execvpe("tmux", [
-                    "tmux", "-L", "cc-terminal", "-f", tmux_conf,
+                    "tmux", "-L", "cc-term", "-f", tmux_conf,
                     "new-session", "-A", "-s", session_name
                 ], env)
             else:
@@ -434,7 +434,7 @@ def pty_read(fd):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="cc-terminal remote server")
+    parser = argparse.ArgumentParser(description="cc-term remote server")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--token", type=str, default="")
     parser.add_argument("--html", type=str, required=True)

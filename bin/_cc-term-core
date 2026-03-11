@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
-# cc-terminal — AI coding terminal environment for macOS
+# cc-term — AI coding terminal environment for macOS
 # ============================================================
 
-CC_HOME="$HOME/.cc-terminal"
+CC_HOME="$HOME/.cc-term"
+CC_PYTHON="$CC_HOME/venv/bin/python"
 BASH_PROFILE="$CC_HOME/config/bash_profile"
 REMOTE_SERVER="$CC_HOME/bin/cc-remote-server.py"
 RELAY_SERVER="$CC_HOME/bin/cc-relay-server.py"
@@ -24,44 +25,16 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
-info()  { echo -e "${CYAN}[cc-terminal]${NC} $*"; }
-ok()    { echo -e "${GREEN}[cc-terminal]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[cc-terminal]${NC} $*"; }
-err()   { echo -e "${RED}[cc-terminal]${NC} $*" >&2; }
+info()  { echo -e "${CYAN}[cc-term]${NC} $*"; }
+ok()    { echo -e "${GREEN}[cc-term]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[cc-term]${NC} $*"; }
+err()   { echo -e "${RED}[cc-term]${NC} $*" >&2; }
 
 usage() {
     echo ""
-    echo -e "${BOLD}cc-terminal${NC} — compatible core for ${BOLD}cc-term${NC}"
+    echo -e "${BOLD}cc-term${NC} — The best Claude Code CLI dev tool for macOS"
     echo ""
-    echo -e "${BOLD}Session:${NC}"
-    echo "  cc-term -ls                        List sessions (with remote URLs)"
-    echo "  cc-term -new <name> [-r] [-q] [-s] Open a new iTerm2 tab + tmux session"
-    echo "  cc-term <name> [-r] [-q] [-s]      Same as: cc-term -new <name>"
-    echo "  cc-term -delete <name>             Destroy a tmux session"
-    echo ""
-    echo -e "${BOLD}Provider:${NC}"
-    echo "  cc-term -provider -ls"
-    echo "  cc-term -provider -new [-name <name>] -api <url> -key <key> [-appId <appId>]"
-    echo "  cc-term -provider -edit <index|name|key> [-name <name>] [-api <url>] [-key <key>] [-appId <appId>]"
-    echo "  cc-term -provider -delete <index|name|key>"
-    echo "  ccs <provider-name>                Use provider by name"
-    echo ""
-    echo -e "${BOLD}Remote:${NC}"
-    echo "  cc-terminal -server                Start aggregate proxy page"
-    echo "  cc-terminal -server -stop          Stop proxy server and remotes"
-    echo "  cc-terminal -r <name>              Register specific tmux sessions"
-    echo ""
-    echo -e "${BOLD}State:${NC}"
-    echo "  cc-terminal save                   Save all sessions, windows, panes"
-    echo "  cc-terminal recover                Restore saved sessions"
-    echo ""
-    echo -e "${BOLD}Plugins:${NC}"
-    echo "  cc-terminal plugins"
-    echo "  cc-terminal plugin install <name>"
-    echo "  cc-terminal plugin uninstall <name>"
-    echo ""
-    echo -e "${BOLD}Other:${NC}"
-    echo "  cc-term -h / cc-terminal -h        Show this help"
+    echo -e "${BOLD}Usage:${NC}  cc-term -h | cc-term -hh (detailed)"
     echo ""
 }
 
@@ -120,7 +93,7 @@ delete_session() {
         return 1
     fi
 
-    if ! tmux -L cc-terminal has-session -t "$session_name" 2>/dev/null; then
+    if ! tmux -L cc-term has-session -t "$session_name" 2>/dev/null; then
         err "Session not found: $session_name"
         return 1
     fi
@@ -128,7 +101,7 @@ delete_session() {
     stop_ttyd_registration "$session_name" "$proxy_port" >/dev/null 2>&1 || true
     remove_private_session "$session_name"
 
-    if tmux -L cc-terminal kill-session -t "$session_name" 2>/dev/null; then
+    if tmux -L cc-term kill-session -t "$session_name" 2>/dev/null; then
         ok "Deleted session: $session_name"
         return 0
     fi
@@ -142,7 +115,7 @@ unregister_proxy_token() {
     local token="$1"
     local proxy_port="${2:-9999}"
     [[ -z "$token" ]] && return 0
-    TOKEN="$token" PROXY_PORT="$proxy_port" python3 -c "
+    TOKEN="$token" PROXY_PORT="$proxy_port" "$CC_PYTHON" -c "
 import http.client, json, os
 try:
     conn = http.client.HTTPConnection('localhost', int(os.environ['PROXY_PORT']), timeout=3)
@@ -188,7 +161,7 @@ stop_ttyd_registration() {
     meta_file=$(ttyd_meta_path "$session_name")
     [[ -f "$meta_file" ]] || return 0
 
-    info=$(META_FILE="$meta_file" python3 -c "
+    info=$(META_FILE="$meta_file" "$CC_PYTHON" -c "
 import json, os
 try:
     with open(os.environ['META_FILE']) as f:
@@ -238,7 +211,7 @@ register_ttyd_session() {
         -t fontSize=14 \
         -t "fontFamily=MesloLGS NF,Menlo,monospace" \
         -t "theme=${TTYD_THEME}" \
-        tmux -L cc-terminal -f "$CC_HOME/config/tmux.conf" new-session -A -s "$session_name" \
+        tmux -L cc-term -f "$CC_HOME/config/tmux.conf" new-session -A -s "$session_name" \
         >/dev/null 2>&1 &
 
     ttyd_pid=$!
@@ -249,13 +222,13 @@ register_ttyd_session() {
         return 1
     fi
 
-    session_meta=$(tmux -L cc-terminal list-sessions -F '#{session_name}:#{session_windows}:#{session_attached}' 2>/dev/null | awk -F: -v target="$session_name" '$1 == target { print $2 "|" $3; exit }')
+    session_meta=$(tmux -L cc-term list-sessions -F '#{session_name}:#{session_windows}:#{session_attached}' 2>/dev/null | awk -F: -v target="$session_name" '$1 == target { print $2 "|" $3; exit }')
     windows=${session_meta%%|*}
     attached=${session_meta#*|}
     [[ -z "$windows" || "$windows" == "$session_meta" ]] && windows="?"
     [[ -z "$attached" || "$attached" == "$session_meta" ]] && attached="0"
 
-    register_result=$(SESSION_NAME="$session_name" TTYD_PORT="$ttyd_port" TOKEN="$token" WINDOWS="$windows" ATTACHED="$attached" PROXY_PORT="$proxy_port" python3 -c "
+    register_result=$(SESSION_NAME="$session_name" TTYD_PORT="$ttyd_port" TOKEN="$token" WINDOWS="$windows" ATTACHED="$attached" PROXY_PORT="$proxy_port" "$CC_PYTHON" -c "
 import http.client, json, os, sys
 body = json.dumps({
     'kind': 'ttyd',
@@ -287,7 +260,7 @@ except Exception as exc:
         return 1
     fi
 
-    proxy_path=$(REGISTER_RESULT="$register_result" python3 -c "import json, os; data = json.loads(os.environ['REGISTER_RESULT']); print(data.get('path', ''))")
+    proxy_path=$(REGISTER_RESULT="$register_result" "$CC_PYTHON" -c "import json, os; data = json.loads(os.environ['REGISTER_RESULT']); print(data.get('path', ''))")
 
     if [[ -z "$proxy_path" ]]; then
         err "Proxy server returned an incomplete registration for '$session_name'."
@@ -295,7 +268,7 @@ except Exception as exc:
         return 1
     fi
 
-    META_FILE="$meta_file" SESSION_NAME="$session_name" TOKEN="$token" PID="$ttyd_pid" TTYD_PORT="$ttyd_port" WINDOWS="$windows" ATTACHED="$attached" PROXY_PATH="$proxy_path" python3 -c "
+    META_FILE="$meta_file" SESSION_NAME="$session_name" TOKEN="$token" PID="$ttyd_pid" TTYD_PORT="$ttyd_port" WINDOWS="$windows" ATTACHED="$attached" PROXY_PATH="$proxy_path" "$CC_PYTHON" -c "
 import json, os
 with open(os.environ['META_FILE'], 'w') as f:
     json.dump({
@@ -322,7 +295,7 @@ list_target_sessions() {
         return
     fi
 
-    tmux -L cc-terminal list-sessions -F '#{session_name}' 2>/dev/null | while IFS= read -r name; do
+    tmux -L cc-term list-sessions -F '#{session_name}' 2>/dev/null | while IFS= read -r name; do
         [[ -z "$name" ]] && continue
         if [[ -f "$PRIVATE_SESSIONS_FILE" ]] && grep -qx "$name" "$PRIVATE_SESSIONS_FILE" 2>/dev/null; then
             continue
@@ -337,7 +310,7 @@ wait_for_tmux_session() {
     local waited=0
 
     while (( waited < timeout_seconds * 10 )); do
-        if tmux -L cc-terminal has-session -t "$session_name" 2>/dev/null; then
+        if tmux -L cc-term has-session -t "$session_name" 2>/dev/null; then
             return 0
         fi
         sleep 0.1
@@ -351,7 +324,7 @@ open_iterm_tab() {
     local session_name="$1"
 
     # Strategy: start bash with our profile, then type tmux command separately.
-    # The tmux alias in bash_profile already adds -L cc-terminal -f tmux.conf,
+    # The tmux alias in bash_profile already adds -L cc-term -f tmux.conf,
     # so we only need "tmux new-session -A -s <name>".
     # The delay ensures bash is fully started before tmux command arrives.
 
@@ -412,7 +385,7 @@ list_plugins() {
     for cfg in "$HOME/.claude.json" "$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json"; do
         if [[ -f "$cfg" ]]; then
             local names
-            names=$(python3 -c "
+            names=$("$CC_PYTHON" -c "
 import json, sys
 try:
     with open('$cfg') as f:
@@ -443,8 +416,8 @@ except: pass
         echo ""
     done
 
-    echo -e "  ${BOLD}Install:${NC}   cc-terminal plugin install <name>"
-    echo -e "  ${BOLD}Uninstall:${NC} cc-terminal plugin uninstall <name>"
+    echo -e "  ${BOLD}Install:${NC}   cc-term plugin install <name>"
+    echo -e "  ${BOLD}Uninstall:${NC} cc-term plugin uninstall <name>"
     echo ""
 }
 
@@ -499,7 +472,7 @@ plugin_install() {
         if [[ -z "$extra_args" ]]; then
             warn "This plugin accepts arguments: $args_hint"
             echo ""
-            read -rp "$(echo -e "${CYAN}[cc-terminal]${NC} Enter value for ${args_hint} (or press Enter to skip): ")" user_arg
+            read -rp "$(echo -e "${CYAN}[cc-term]${NC} Enter value for ${args_hint} (or press Enter to skip): ")" user_arg
             extra_args="$user_arg"
         fi
 
@@ -570,16 +543,16 @@ case "${1:-}" in
         echo ""
 
         # Get tmux sessions
-        TMUX_OUTPUT=$(tmux -L cc-terminal list-sessions -F "#{session_name}:#{session_windows}:#{session_attached}" 2>/dev/null)
+        TMUX_OUTPUT=$(tmux -L cc-term list-sessions -F "#{session_name}:#{session_windows}:#{session_attached}" 2>/dev/null)
         if [[ -z "$TMUX_OUTPUT" ]]; then
-            warn "No cc-terminal tmux sessions running."
+            warn "No cc-term tmux sessions running."
             echo ""
             exit 0
         fi
 
         # Try to get remote backends from proxy
         PROXY_PORT=9999
-        BACKENDS_JSON=$(python3 -c "
+        BACKENDS_JSON=$("$CC_PYTHON" -c "
 import http.client, json, sys
 try:
     conn = http.client.HTTPConnection('localhost', ${PROXY_PORT}, timeout=2)
@@ -605,7 +578,7 @@ except:
                 if [[ -n "$token" && -n "$label" ]]; then
                     REMOTE_URLS["$label"]="http://${LOCAL_IP}:${PROXY_PORT}/?token=${token}"
                 fi
-            done < <(python3 -c "
+            done < <("$CC_PYTHON" -c "
 import json, sys
 try:
     data = json.loads('''${BACKENDS_JSON}''')
@@ -617,7 +590,7 @@ except:
         fi
 
         # Try to get registered sessions from proxy
-        SESSION_JSON=$(python3 -c "
+        SESSION_JSON=$("$CC_PYTHON" -c "
 import http.client
 try:
     conn = http.client.HTTPConnection('localhost', ${PROXY_PORT}, timeout=2)
@@ -640,7 +613,7 @@ except:
                 if [[ -n "$name" && -n "$proxy_path" ]]; then
                     SESSION_URLS["$name"]="http://${LOCAL_IP}:${PROXY_PORT}${proxy_path}"
                 fi
-            done < <(python3 -c "
+            done < <("$CC_PYTHON" -c "
 import json
 try:
     data = json.loads('''${SESSION_JSON}''')
@@ -673,7 +646,7 @@ except:
 
             if [[ -n "${SESSION_URLS[$name]:-}" ]]; then
                 local kind_label=""
-                kind_label=$(python3 -c "
+                kind_label=$("$CC_PYTHON" -c "
 import json
 try:
     data = json.loads('''${SESSION_JSON}''')
@@ -701,7 +674,7 @@ except: print('ttyd')
     # ---- Save state ----
     save)
         require_config
-        python3 "$STATE_MANAGER" save
+        "$CC_PYTHON" "$STATE_MANAGER" save
         ;;
 
     # ---- Recover state ----
@@ -714,7 +687,7 @@ except: print('ttyd')
         fi
 
         # Run recover and capture output
-        output=$(python3 "$STATE_MANAGER" recover)
+        output=$("$CC_PYTHON" "$STATE_MANAGER" recover)
         echo "$output" | grep -v "^__RESTORED__:"
 
         # Extract restored session names and open iTerm2 tabs
@@ -735,13 +708,13 @@ except: print('ttyd')
 
     # ---- Show saved state ----
     show)
-        python3 "$STATE_MANAGER" show
+        "$CC_PYTHON" "$STATE_MANAGER" show
         ;;
 
     # ---- Update ----
     update)
         echo ""
-        info "Updating cc-terminal components..."
+        info "Updating cc-term components..."
         echo ""
 
         # 1. Claude Code CLI
@@ -793,8 +766,8 @@ except: print('ttyd')
         fi
         echo ""
 
-        # 4. cc-terminal configs
-        echo -e "  ${BOLD}[4/4] cc-terminal configs${NC}"
+        # 4. cc-term configs
+        echo -e "  ${BOLD}[4/4] cc-term configs${NC}"
         # Check if source directory is accessible
         SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
         SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
@@ -807,7 +780,7 @@ except: print('ttyd')
             mkdir -p "$CC_HOME/config/tmate" 2>/dev/null
             cp "$SOURCE_DIR/config/tmate/index.html" "$CC_HOME/config/tmate/index.html" 2>/dev/null && ok "  tmate/index.html"
             cp "$SOURCE_DIR/config/tmate/tmate.conf" "$CC_HOME/config/tmate/tmate.conf" 2>/dev/null && ok "  tmate/tmate.conf"
-            cp "$SOURCE_DIR/bin/cc-terminal"     "$CC_HOME/bin/cc-terminal"     2>/dev/null
+            cp "$SOURCE_DIR/bin/_cc-term-core"     "$CC_HOME/bin/_cc-term-core"     2>/dev/null
             cp "$SOURCE_DIR/bin/cc-term"         "$CC_HOME/bin/cc-term"         2>/dev/null
             cp "$SOURCE_DIR/bin/cc-remote-server.py"  "$CC_HOME/bin/cc-remote-server.py"  2>/dev/null
             cp "$SOURCE_DIR/bin/cc-relay-server.py"   "$CC_HOME/bin/cc-relay-server.py"   2>/dev/null
@@ -818,7 +791,7 @@ except: print('ttyd')
             for script in "$SOURCE_DIR"/providers/*.sh; do
                 [[ -f "$script" ]] && cp "$script" "$CC_HOME/providers/" 2>/dev/null
             done
-            chmod +x "$CC_HOME/bin/cc-terminal" "$CC_HOME/bin/cc-term"
+            chmod +x "$CC_HOME/bin/_cc-term-core" "$CC_HOME/bin/cc-term"
             ok "  Configs re-deployed."
         else
             warn "  Source directory not found (standalone install). Configs unchanged."
@@ -858,38 +831,38 @@ except: print('ttyd')
         ;;
 
     # ---- Provider management ----
-    provider)
+    provider|-p)
         shift
         sub="${1:-}"
 
         case "$sub" in
             ""|-ls|list|ls)
-                python3 "$PROVIDER_MANAGER" list
+                "$CC_PYTHON" "$PROVIDER_MANAGER" list
                 ;;
             -new|new|install|add)
                 shift
-                python3 "$PROVIDER_MANAGER" new "$@"
+                "$CC_PYTHON" "$PROVIDER_MANAGER" new "$@"
                 ;;
             -edit|edit)
                 shift
-                python3 "$PROVIDER_MANAGER" edit "$@"
+                "$CC_PYTHON" "$PROVIDER_MANAGER" edit "$@"
                 ;;
             -delete|delete|uninstall|remove)
                 shift
-                python3 "$PROVIDER_MANAGER" delete "$@"
+                "$CC_PYTHON" "$PROVIDER_MANAGER" delete "$@"
                 ;;
             env)
                 shift
-                python3 "$PROVIDER_MANAGER" env "$@"
+                "$CC_PYTHON" "$PROVIDER_MANAGER" env "$@"
                 ;;
             identifiers)
-                python3 "$PROVIDER_MANAGER" identifiers
+                "$CC_PYTHON" "$PROVIDER_MANAGER" identifiers
                 ;;
             seed)
-                python3 "$PROVIDER_MANAGER" seed
+                "$CC_PYTHON" "$PROVIDER_MANAGER" seed
                 ;;
             *)
-                python3 "$PROVIDER_MANAGER" set-default "$sub"
+                "$CC_PYTHON" "$PROVIDER_MANAGER" set-default "$sub"
                 ;;
         esac
         ;;
@@ -919,7 +892,7 @@ except: print('ttyd')
             done
             for meta_file in "$REMOTE_PID_DIR"/ttyd-*.json; do
                 [[ -f "$meta_file" ]] || continue
-                session_name=$(META_FILE="$meta_file" python3 -c "
+                session_name=$(META_FILE="$meta_file" "$CC_PYTHON" -c "
 import json, os
 try:
     with open(os.environ['META_FILE']) as f:
@@ -957,7 +930,7 @@ except Exception:
         TOKEN_ARGS=""
         [[ -n "$SERVER_TOKEN" ]] && TOKEN_ARGS="--token $SERVER_TOKEN"
 
-        python3 "$PROXY_SERVER" \
+        "$CC_PYTHON" "$PROXY_SERVER" \
             --port "$SERVER_PORT" \
             --html "$CC_HOME/config/tmate/index.html" \
             $TOKEN_ARGS &
@@ -982,8 +955,8 @@ except Exception:
             echo -e "  ${BOLD}Token:${NC}  ${DIM}(none)${NC}"
         fi
         echo ""
-        echo -e "  ${DIM}Waiting for cc-terminal -r to register sessions...${NC}"
-        echo -e "  Stop with: ${BOLD}cc-terminal -server -stop${NC}"
+        echo -e "  ${DIM}Waiting for cc-term -r to register sessions...${NC}"
+        echo -e "  Stop with: ${BOLD}cc-term -server -stop${NC}"
         echo ""
 
         if [[ "$BACKGROUND" -eq 0 ]]; then
@@ -1010,7 +983,7 @@ except Exception:
                 echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${session_name}${NC}"
                 echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
             else
-                warn "Could not register session '$session_name' (is 'cc-terminal -server' running?)"
+                warn "Could not register session '$session_name' (is 'cc-term -server' running?)"
             fi
         done < <(list_target_sessions "$SESSIONS")
 
@@ -1028,7 +1001,7 @@ except Exception:
             show_qr "$TTYD_AGGREGATE_URL"
         fi
         echo -e "  Open the URL on your device."
-        echo -e "  Stop with: ${BOLD}cc-terminal -server -stop${NC}"
+        echo -e "  Stop with: ${BOLD}cc-term -server -stop${NC}"
         echo ""
         ;;
 
@@ -1080,7 +1053,7 @@ except Exception:
                     show_qr "$TTYD_REGISTERED_URL"
                 fi
             else
-                warn "Could not register with proxy (is 'cc-terminal -server' running?)"
+                warn "Could not register with proxy (is 'cc-term -server' running?)"
             fi
         fi
         ;;

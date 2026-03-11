@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cc-terminal tmate manager
+cc-term tmate manager
 
 Creates one detached tmate relay per selected tmux session and serves a
 lightweight index page listing the generated web/SSH links.
@@ -20,7 +20,7 @@ from hashlib import sha1
 from urllib.parse import parse_qs, urlparse
 
 
-TMUX_SOCKET = "cc-terminal"
+TMUX_SOCKET = "cc-term"
 
 
 def parse_http_request(data):
@@ -56,7 +56,7 @@ class TmateManagerServer:
             with open(path, "r") as handle:
                 return handle.read()
         except FileNotFoundError:
-            return "<html><body><h1>cc-terminal: tmate index not found</h1></body></html>"
+            return "<html><body><h1>cc-term: tmate index not found</h1></body></html>"
 
     def _get_excluded_sessions(self):
         if not self.exclude_file:
@@ -287,7 +287,7 @@ class TmateManagerServer:
 
     def _start_socket(self, session_name, socket_path):
         command = (
-            "env -u TMUX tmux -L cc-terminal -f "
+            "env -u TMUX tmux -L cc-term -f "
             f"{shlex.quote(self.tmux_conf)} new-session -A -s {shlex.quote(session_name)}"
         )
         start_cmd = self._tmate_cmd(
@@ -492,7 +492,7 @@ def parse_sessions(raw_sessions):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="cc-terminal tmate manager")
+    parser = argparse.ArgumentParser(description="cc-term tmate manager")
     parser.add_argument("--port", type=int, default=9998)
     parser.add_argument("--html", type=str, required=True)
     parser.add_argument("--tmux-conf", type=str, required=True)
