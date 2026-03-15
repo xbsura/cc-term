@@ -1,20 +1,20 @@
-# 快速开始：部署代理服务器
+# Quick Start: Deploy the Proxy Server
 
-## 1. 打包部署文件
+## 1. Package Deployment Files
 
-在本地运行：
+Run locally:
 ```bash
 cd deploy
 ./package.sh
 ```
 
-## 2. 上传到服务器
+## 2. Upload to Server
 
 ```bash
 scp cc-term-deploy.tar.gz root@your-server:/tmp/
 ```
 
-## 3. 在服务器上部署
+## 3. Deploy on Server
 
 ```bash
 ssh root@your-server
@@ -27,21 +27,21 @@ cd deploy
 ./setup-server.sh your-domain.com admin@your-domain.com
 ```
 
-## 4. 客户端使用
+## 4. Client Usage
 
-cc-term 内置了 WebSocket 反向隧道，不需要额外的隧道工具。
+cc-term has a built-in WebSocket reverse tunnel — no additional tunnel tools needed.
 
 ```bash
-# 使用默认代理 (ttyd.ink)
+# Use default proxy (ttyd.ink)
 cc-term main -r
 
-# 使用自建代理
+# Use self-hosted proxy
 CC_PROXY_HOST=your-domain.com cc-term main -r
 ```
 
-### 环境变量配置
+### Environment Variables
 
-���以通过环境变量指向自建代理服务器：
+You can point to a self-hosted proxy server via environment variables:
 
 ```bash
 export CC_PROXY_HOST=your-domain.com
@@ -51,21 +51,21 @@ export CC_PROXY_PROTOCOL=https
 cc-term main -r
 ```
 
-## 带密码保护
+## Password Protection
 
 ```bash
 cc-term main -r -u myuser -p mypass
 ```
 
-访问时需要输入用户名和密码。
+Username and password will be required to access the session.
 
-## 本地代理模式
+## Local Proxy Mode
 
-如果只在局域网使用，可以启动本地代理服务器：
+For LAN-only usage, start a local proxy server:
 
 ```bash
 cc-term -server
 cc-term main -r
 ```
 
-详细部署说明请参阅 [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)。
+For detailed deployment instructions, see [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md).

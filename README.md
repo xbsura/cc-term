@@ -2,6 +2,8 @@
 
 A client-side toolkit for programmers who use [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on macOS. It creates an isolated directory with pre-configured console tools, session save/recover, and one-command remote access — so you can code from anywhere, even your phone.
 
+![cc-term demo](assets/cc-term-demo.png)
+
 ## Why cc-term?
 
 - **All-in-one toolkit** — One install gets you bat, btop, lazygit, tig, vim, tmux, and more, all themed and hotkeyed. No manual configuration needed.

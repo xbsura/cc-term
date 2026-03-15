@@ -1,51 +1,51 @@
-# 部署 cc-term 代理服务器
+# Deploy cc-term Proxy Server
 
-## 快速部署
+## Quick Deploy
 
 ```bash
-# 1. 上传文件到服务器
+# 1. Upload files to server
 scp bin/cc-proxy-server.py root@your-server:/tmp/
 scp -r config/ttyd root@your-server:/tmp/
 
-# 2. SSH 到服务器运行部署脚本
+# 2. SSH into server and run setup script
 ssh root@your-server
 bash /tmp/setup-server.sh your-domain.com admin@your-domain.com
 ```
 
-详细步骤请参阅 [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)。
+For detailed steps, see [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md).
 
-## 文件说明
+## Files
 
-| 文件 | 说明 |
-|------|------|
-| `setup-server.sh` | 一键部署脚本（安装依赖、配置 systemd、Nginx、SSL） |
-| `deploy.sh` | 部署脚本（手动步骤版本） |
-| `nginx.conf` | Nginx 配置模板 |
-| `package.sh` | 打包部署文件 |
-| `publish.sh` | 发布脚本 |
+| File | Description |
+|------|-------------|
+| `setup-server.sh` | One-click deploy script (installs deps, configures systemd, Nginx, SSL) |
+| `deploy.sh` | Deploy script (manual steps version) |
+| `nginx.conf` | Nginx config template |
+| `package.sh` | Package deployment files |
+| `publish.sh` | Publish script |
 
-## 服务器端架构
+## Server Architecture
 
 ```
 cc-proxy-server.py (port 9999)
-  ├── 接收客户端 WebSocket 反向隧道连接
-  ├── 管理 session 注册（agg_key/agg_secret 认证）
-  ├── 代理浏览器 WebSocket 到本地 ttyd
-  └── 提供 session 聚合页面
+  ├── Accepts client WebSocket reverse tunnel connections
+  ├── Manages session registration (agg_key/agg_secret auth)
+  ├── Proxies browser WebSocket to local ttyd
+  └── Serves session aggregation page
           ↕
 Nginx (port 443, SSL)
-  └── 反向代理所有请求到 9999
+  └── Reverse-proxies all requests to 9999
 ```
 
-## 客户端使用
+## Client Usage
 
 ```bash
-# 使用默认代理 (ttyd.ink)
+# Use default proxy (ttyd.ink)
 cc-term main -r
 
-# 使用自建代理
+# Use self-hosted proxy
 CC_PROXY_HOST=your-domain.com cc-term main -r
 
-# 带密码保护
+# With password protection
 cc-term main -r -u admin -p secret
 ```
