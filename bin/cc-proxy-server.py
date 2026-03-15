@@ -583,12 +583,20 @@ echo ""
                 await writer.drain()
                 writer.close()
                 return
+            # Invalid agg_key — delay to prevent enumeration
+            if len(path_key) >= 8:
+                await asyncio.sleep(3)
+                writer.write(self.http_response("404 Not Found", "text/plain", "Not found"))
+                await writer.drain()
+                writer.close()
+                return
 
         if path.startswith("/t/"):
             parts = path.split("/", 3)  # ['', 't', token, ...]
             ttyd_token = parts[2] if len(parts) > 2 else ""
             info = ttyd_sessions.get(ttyd_token)
             if not info:
+                await asyncio.sleep(3)
                 writer.write(self.http_response("404 Not Found", "text/plain", "Session not found"))
                 await writer.drain()
                 writer.close()

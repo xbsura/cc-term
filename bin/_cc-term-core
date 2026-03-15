@@ -1248,8 +1248,6 @@ except Exception:
             echo ""
             echo -e "${BOLD}Aggregate Page:${NC}"
             echo -e "  ${CYAN}${AGGREGATE_URL}${NC}"
-            echo ""
-            show_qr "$AGGREGATE_URL"
         fi
         echo ""
         ;;
@@ -1315,9 +1313,8 @@ except Exception:
                         ER_AGG_URL="http://${ER_HOST}:${ER_PORT}/${ER_AGGKEY}"
                     fi
                     echo ""
-                    echo -e "  ${GREEN}${BOLD}Already registered:${NC} ${BOLD}${ER_SESSION}${NC}"
-                    echo -e "  ${BOLD}URL:${NC}       ${CYAN}${ER_URL}${NC}"
-                    echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${ER_AGG_URL}${NC}"
+                    ok "Already registered: $ER_SESSION"
+                    echo -e "  ${BOLD}URL:${NC} ${CYAN}${ER_URL}${NC}"
                     echo ""
                     # Refresh tmux status bar
                     tmux -L cc-term refresh-client -S 2>/dev/null || true
@@ -1328,14 +1325,10 @@ except Exception:
             echo ""
             info "Registering: $ER_SESSION"
             if register_ttyd_session "$ER_SESSION" "$ER_HOST" "$ER_PORT" "$OPT_USERNAME" "$OPT_PASSWORD"; then
-                echo ""
-                echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${ER_SESSION}${NC}"
-                echo -e "  ${BOLD}URL:${NC}       ${CYAN}${TTYD_REGISTERED_URL}${NC}"
-                echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
-                echo ""
-                if [[ "$OPT_QUIET" -ne 1 ]]; then
-                    show_qr "$TTYD_REGISTERED_URL"
-                fi
+                ok "Registered: $ER_SESSION"
+                # Show info in a new tmux window
+                tmux -L cc-term new-window -t "$ER_SESSION" -n "remote" \
+                    "echo ''; echo -e '${GREEN}${BOLD}Remote Access${NC}'; echo ''; echo -e '  ${BOLD}Session:${NC}   ${ER_SESSION}'; echo -e '  ${BOLD}URL:${NC}       ${CYAN}${TTYD_REGISTERED_URL}${NC}'; echo -e '  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}'; echo ''; echo -e '  ${DIM}Press any key to close this window${NC}'; read -n1; exit" 2>/dev/null || true
                 # Refresh tmux status bar to show R indicator
                 tmux -L cc-term refresh-client -S 2>/dev/null || true
             else
@@ -1381,14 +1374,14 @@ except Exception:
             fi
 
             REGISTERED_COUNT=0
+            REGISTERED_INFO=""
             while IFS= read -r session_name; do
                 [[ -z "$session_name" ]] && continue
                 info "Registering: $session_name"
                 if register_ttyd_session "$session_name" "$PROXY_HOST" "$PROXY_PORT" "$OPT_USERNAME" "$OPT_PASSWORD"; then
                     REGISTERED_COUNT=$((REGISTERED_COUNT + 1))
-                    echo ""
-                    echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${session_name}${NC}"
-                    echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
+                    ok "Registered: $session_name"
+                    REGISTERED_INFO="${REGISTERED_INFO}  ${session_name}: ${TTYD_REGISTERED_URL}\n"
                 else
                     warn "Could not register session '$session_name'"
                 fi
@@ -1399,17 +1392,14 @@ except Exception:
                 exit 1
             fi
 
-            echo ""
-            echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
-            echo ""
-            if [[ "$OPT_QUIET" -ne 1 ]]; then
-                if [[ "$REGISTERED_COUNT" -eq 1 ]]; then
-                    show_qr "$TTYD_REGISTERED_URL"
-                else
-                    show_qr "$TTYD_AGGREGATE_URL"
-                fi
+            # Show info in a tmux window of the first registered session
+            FIRST_SESSION=$(list_target_sessions "$SESSION_NAME" | head -1)
+            if [[ -n "$FIRST_SESSION" ]]; then
+                tmux -L cc-term new-window -t "$FIRST_SESSION" -n "remote" \
+                    "echo ''; echo -e '${GREEN}${BOLD}Remote Access${NC}'; echo ''; echo -e '${REGISTERED_INFO}'; echo -e '  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}'; echo ''; echo -e '  ${DIM}Press any key to close this window${NC}'; read -n1; exit" 2>/dev/null || true
             fi
-            echo -e "  Open the URL on your device."
+
+            echo ""
             echo -e "  Stop with: ${BOLD}cc-term -server -stop${NC}"
             echo ""
         fi
