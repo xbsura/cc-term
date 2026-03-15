@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -24,7 +24,7 @@
             --accent-soft: rgba(106, 169, 255, 0.18);
             --green: #57d37c;
             --shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
-            --radius: 16px;
+            --radius: 6px;
         }
 
         * {
@@ -35,9 +35,7 @@
         body {
             margin: 0;
             min-height: 100%;
-            background:
-                radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 32%),
-                linear-gradient(180deg, #232323 0%, #141414 100%);
+            background: #141414;
             color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
         }
@@ -55,21 +53,21 @@
             height: min(940px, calc(100vh - 36px));
             display: flex;
             flex-direction: column;
-            border-radius: 18px;
+            border-radius: 8px;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.06);
-            background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-main) 100%);
+            background: var(--bg-main);
             box-shadow: var(--shadow);
         }
 
         .chrome {
-            height: 56px;
+            height: 44px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 18px;
-            padding: 0 18px;
-            background: linear-gradient(180deg, #414141 0%, var(--chrome) 100%);
+            padding: 0 14px;
+            background: var(--chrome);
             border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
 
@@ -81,22 +79,6 @@
             min-width: 0;
         }
 
-        .traffic-lights {
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
-        .traffic-lights span {
-            width: 12px;
-            height: 12px;
-            border-radius: 999px;
-            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22);
-        }
-
-        .traffic-lights .red { background: #ff5f57; }
-        .traffic-lights .yellow { background: #febc2e; }
-        .traffic-lights .green { background: #28c840; }
 
         .chrome-title {
             min-width: 0;
@@ -123,36 +105,36 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 7px 12px;
-            border-radius: 999px;
+            padding: 5px 10px;
+            border-radius: 4px;
             background: rgba(255, 255, 255, 0.07);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            font-size: 12px;
+            font-size: 11px;
             white-space: nowrap;
         }
 
         .status-pill::before {
             content: "";
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 999px;
             background: var(--green);
-            box-shadow: 0 0 10px rgba(87, 211, 124, 0.45);
+            box-shadow: 0 0 8px rgba(87, 211, 124, 0.45);
         }
 
         .workspace {
             flex: 1;
             min-height: 0;
             display: flex;
-            background: linear-gradient(180deg, #212121 0%, var(--bg-deep) 100%);
+            background: var(--bg-deep);
         }
 
         .rail {
-            width: 264px;
-            min-width: 264px;
+            width: 200px;
+            min-width: 200px;
             display: flex;
             flex-direction: column;
-            background: linear-gradient(180deg, #272727 0%, var(--rail) 100%);
+            background: var(--rail);
             border-right: 1px solid var(--rail-border);
         }
 
@@ -189,7 +171,7 @@
             cursor: pointer;
             color: var(--text);
             background: rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
+            border-radius: 4px;
             font-size: 12px;
             font-weight: 600;
         }
@@ -216,27 +198,25 @@
             width: 100%;
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px 12px;
-            margin-bottom: 6px;
+            gap: 8px;
+            padding: 8px 10px;
+            margin-bottom: 2px;
             border: 1px solid transparent;
-            border-radius: 11px;
+            border-radius: 4px;
             background: transparent;
             color: var(--text);
             cursor: pointer;
             text-align: left;
-            transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+            transition: background 0.12s ease, border-color 0.12s ease;
         }
 
         .tab-item:hover {
             background: rgba(255, 255, 255, 0.045);
-            transform: translateX(1px);
         }
 
         .tab-item.active {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.05) 100%);
+            background: rgba(255, 255, 255, 0.07);
             border-color: rgba(255, 255, 255, 0.08);
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
         }
 
         .tab-glow {
@@ -278,11 +258,25 @@
         }
 
         .rail-foot {
-            padding: 10px 12px 14px;
+            padding: 10px 12px 12px 16px;
             border-top: 1px solid rgba(255, 255, 255, 0.04);
             color: var(--muted);
             font-size: 11px;
             line-height: 1.45;
+            text-align: center;
+        }
+
+        .rail-foot kbd {
+            display: inline-block;
+            margin: 0 1px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
+            color: #ccc;
+            font-size: 10px;
+            font-family: inherit;
+            font-weight: 600;
         }
 
         .viewer {
@@ -291,18 +285,11 @@
             min-height: 0;
             display: flex;
             flex-direction: column;
-            background: linear-gradient(180deg, #1d1d1d 0%, #161616 100%);
+            background: #161616;
         }
 
         .viewer-topbar {
-            min-height: 54px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 14px;
-            padding: 0 18px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.015) 100%);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: none;
         }
 
         .viewer-tabs {
@@ -319,8 +306,8 @@
             gap: 8px;
             min-width: 0;
             padding: 7px 12px;
-            border-radius: 10px 10px 0 0;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 100%);
+            border-radius: 4px 4px 0 0;
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.06);
             border-bottom-color: transparent;
         }
@@ -355,8 +342,8 @@
         .desktop-hint kbd {
             display: inline-block;
             margin: 0 2px;
-            padding: 2px 6px;
-            border-radius: 6px;
+            padding: 2px 5px;
+            border-radius: 3px;
             border: 1px solid rgba(255, 255, 255, 0.08);
             background: rgba(255, 255, 255, 0.05);
             color: #ececec;
@@ -369,7 +356,7 @@
             flex: 1;
             min-height: 0;
             position: relative;
-            padding: 14px;
+            padding: 10px;
         }
 
         .mobile-header {
@@ -380,11 +367,10 @@
             position: relative;
             width: 100%;
             height: 100%;
-            border-radius: 14px;
+            border-radius: 6px;
             overflow: hidden;
             background: #101010;
             border: 1px solid var(--border);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         iframe {
@@ -392,18 +378,19 @@
             height: 100%;
             border: 0;
             background: #101010;
+            transition: opacity 0.3s ease;
         }
 
         .overlay,
         .empty-state,
         .mobile-sheet {
             position: absolute;
-            border-radius: 14px;
+            border-radius: 6px;
         }
 
         .overlay,
         .empty-state {
-            inset: 14px;
+            inset: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -413,25 +400,32 @@
 
         .overlay {
             z-index: 4;
-            background: rgba(16, 16, 16, 0.84);
-            backdrop-filter: blur(6px);
-            transition: opacity 0.18s ease;
+            background: #101010;
+            transition: opacity 0.35s ease;
         }
 
         .overlay.hidden {
+            display: flex; /* override generic .hidden — keep in DOM for fade */
             opacity: 0;
             pointer-events: none;
         }
 
-        .spinner {
-            width: 28px;
-            height: 28px;
-            margin-bottom: 12px;
-            border-radius: 999px;
-            border: 2px solid rgba(255, 255, 255, 0.16);
-            border-top-color: var(--accent);
-            animation: spin 0.7s linear infinite;
+        .dots {
+            display: flex;
+            gap: 14px;
+            margin-bottom: 18px;
         }
+
+        .dots span {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.55);
+            animation: bounce 1.2s ease-in-out infinite;
+        }
+
+        .dots span:nth-child(2) { animation-delay: 0.15s; }
+        .dots span:nth-child(3) { animation-delay: 0.3s; }
 
         .overlay p,
         .empty-state p {
@@ -451,7 +445,7 @@
 
         .empty-state {
             z-index: 2;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0.012) 100%);
+            background: rgba(255, 255, 255, 0.02);
         }
 
         .empty-state.hidden,
@@ -460,7 +454,7 @@
         }
 
         .mobile-sheet {
-            inset: 14px;
+            inset: 10px;
             z-index: 5;
             background: rgba(20, 20, 20, 0.96);
             border: 1px solid rgba(255, 255, 255, 0.07);
@@ -516,8 +510,8 @@
         .mobile-pane-card {
             width: 100%;
             border: 1px solid rgba(255, 255, 255, 0.07);
-            border-radius: 14px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.025) 100%);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.04);
             color: var(--text);
             text-align: left;
             cursor: pointer;
@@ -549,8 +543,8 @@
             align-items: center;
             gap: 6px;
             margin-top: 10px;
-            padding: 5px 9px;
-            border-radius: 999px;
+            padding: 4px 8px;
+            border-radius: 4px;
             background: var(--accent-soft);
             color: #dbe9ff;
             font-size: 11px;
@@ -559,7 +553,7 @@
 
         .mobile-pane-group {
             border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 14px;
+            border-radius: 6px;
             overflow: hidden;
             background: rgba(255, 255, 255, 0.02);
         }
@@ -595,13 +589,13 @@
 
         .mobile-pane-card.active {
             border-color: rgba(106, 169, 255, 0.45);
-            background: linear-gradient(180deg, rgba(106, 169, 255, 0.22) 0%, rgba(106, 169, 255, 0.08) 100%);
+            background: rgba(106, 169, 255, 0.12);
         }
 
         .mobile-note {
             margin-bottom: 10px;
             padding: 11px 12px;
-            border-radius: 12px;
+            border-radius: 4px;
             background: rgba(106, 169, 255, 0.1);
             color: #dce9ff;
             font-size: 12px;
@@ -610,15 +604,15 @@
 
         .mobile-header {
             position: absolute;
-            top: 14px;
-            left: 14px;
-            right: 14px;
+            top: 10px;
+            left: 10px;
+            right: 10px;
             z-index: 3;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
             padding: 8px 10px;
-            border-radius: 12px;
+            border-radius: 4px;
             background: rgba(12, 12, 12, 0.82);
             backdrop-filter: blur(6px);
             border: 1px solid rgba(255, 255, 255, 0.06);
@@ -664,8 +658,9 @@
             display: none;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+            40% { transform: scale(1); opacity: 1; }
         }
 
         @media (max-width: 959px), (pointer: coarse) {
@@ -724,18 +719,12 @@
     <div class="app-shell">
         <header class="chrome">
             <div class="chrome-left">
-                <div class="traffic-lights" aria-hidden="true">
-                    <span class="red"></span>
-                    <span class="yellow"></span>
-                    <span class="green"></span>
-                </div>
                 <div class="chrome-title">
-                    <h1>cc-term</h1>
-                    <p>PC 端更像 iTerm2 本地开发；移动端保留 tmate 框架，同时增加触屏选择 session / pane 流。</p>
+                    <h1><a href="https://ttyd.ink" style="color:inherit;text-decoration:none">cc-term</a></h1>
                 </div>
             </div>
             <div class="chrome-right">
-                <div id="memory-pill" class="memory-pill">会记住上次桌面会话</div>
+                <div id="memory-pill" class="memory-pill">Remembers last session</div>
                 <div id="status-pill" class="status-pill">sessions ready</div>
             </div>
         </header>
@@ -745,13 +734,13 @@
                 <div class="rail-head">
                     <div>
                         <h2>Sessions</h2>
-                        <p id="session-summary">正在刷新会话列表…</p>
+                        <p id="session-summary">Loading sessions...</p>
                     </div>
-                    <button id="refresh-btn" class="refresh-btn" type="button">刷新</button>
+                    <button id="refresh-btn" class="refresh-btn" type="button">Refresh</button>
                 </div>
                 <div id="tab-list" class="tab-list"></div>
                 <div class="rail-foot">
-                    桌面端支持 <kbd>⌘</kbd><kbd>↑</kbd> / <kbd>⌘</kbd><kbd>↓</kbd> 切换会话；进入桌面视图时会自动恢复完整 tmux 视图，避免移动端小窗口放大状态残留。
+                    <kbd>⌘</kbd><kbd>↑</kbd> / <kbd>⌘</kbd><kbd>↓</kbd>
                 </div>
             </aside>
 
@@ -760,24 +749,24 @@
                     <div class="viewer-tabs">
                         <div class="viewer-tab">
                             <span class="dot"></span>
-                            <strong id="viewer-title">等待会话</strong>
-                            <span id="viewer-subtitle">读写 tmate 窗口</span>
+                            <strong id="viewer-title">Waiting</strong>
+                            <span id="viewer-subtitle">Terminal view</span>
                         </div>
                     </div>
                     <div class="desktop-hint">
-                        切换：<kbd>⌘</kbd><kbd>↑</kbd> / <kbd>⌘</kbd><kbd>↓</kbd>
+                        <kbd>⌘</kbd><kbd>↑</kbd> / <kbd>⌘</kbd><kbd>↓</kbd>
                     </div>
                 </div>
 
                 <div class="viewer-body">
                     <div id="mobile-header" class="mobile-header hidden">
                         <div class="mobile-header-copy">
-                            <strong id="mobile-header-title">触屏选择会话</strong>
-                            <span id="mobile-header-subtitle">先选大的 tmux，再选小窗口</span>
+                            <strong id="mobile-header-title">Select session</strong>
+                            <span id="mobile-header-subtitle">Choose a session, then a pane</span>
                         </div>
                         <div class="mobile-actions">
-                            <button id="mobile-session-btn" class="mobile-action-btn" type="button">会话</button>
-                            <button id="mobile-pane-btn" class="mobile-action-btn" type="button">小窗</button>
+                            <button id="mobile-session-btn" class="mobile-action-btn" type="button">Sessions</button>
+                            <button id="mobile-pane-btn" class="mobile-action-btn" type="button">Panes</button>
                         </div>
                     </div>
 
@@ -786,22 +775,22 @@
                     </div>
 
                     <div id="loading-overlay" class="overlay hidden">
-                        <div class="spinner"></div>
-                        <p id="loading-text">正在打开 tmate 读写窗口…</p>
-                        <small id="loading-subtext">桌面端会尽量保持 iTerm2 的本地感；移动端在进入小窗口前，会先把目标 pane 切到当前并放大显示。</small>
+                        <div class="dots"><span></span><span></span><span></span></div>
+                        <p id="loading-text">Opening terminal...</p>
+                        <small id="loading-subtext"></small>
                     </div>
 
                     <div id="empty-state" class="empty-state hidden">
-                        <p>还没有可用会话</p>
-                        <small>先在本机运行 `cc-term -r &lt;name&gt;`，然后刷新本页即可。</small>
+                        <p>No sessions available</p>
+                        <small>Run <code>cc-term -r &lt;name&gt;</code> first, then refresh this page.</small>
                     </div>
 
                     <div id="mobile-sheet" class="mobile-sheet hidden">
                         <div class="mobile-sheet-head">
-                            <button id="mobile-back-btn" class="mobile-back-btn" type="button">返回</button>
+                            <button id="mobile-back-btn" class="mobile-back-btn" type="button">Back</button>
                             <div class="mobile-sheet-copy">
-                                <h3 id="mobile-sheet-title">选择会话</h3>
-                                <p id="mobile-sheet-subtitle">先选大的 tmux 会话，再选要聚焦的小窗口。</p>
+                                <h3 id="mobile-sheet-title">Select session</h3>
+                                <p id="mobile-sheet-subtitle">Choose a tmux session, then select a pane.</p>
                             </div>
                         </div>
                         <div id="mobile-sheet-body" class="mobile-sheet-body"></div>
@@ -888,7 +877,27 @@
         }
 
         function sessionLaunchUrl(item) {
-            return fullProxyUrl(item.proxy_path) || item.web_url || '';
+            let url = fullProxyUrl(item.proxy_path) || item.web_url || '';
+
+            // Add authentication to URL if session is protected
+            if (item.protected && url) {
+                const authKey = `auth_${item.name}`;
+                const authHeader = sessionStorage.getItem(authKey);
+                if (authHeader) {
+                    try {
+                        const decoded = atob(authHeader);
+                        const urlObj = new URL(url);
+                        const [username, password] = decoded.split(':', 2);
+                        urlObj.username = username;
+                        urlObj.password = password;
+                        url = urlObj.toString();
+                    } catch (e) {
+                        // Keep original URL if parsing fails
+                    }
+                }
+            }
+
+            return url;
         }
 
         function isMobileMode() {
@@ -896,13 +905,16 @@
         }
 
         function showLoading(text, subtext) {
-            if (text) {
-                elements.loadingText.textContent = text;
-            }
-            if (subtext) {
-                elements.loadingSubtext.textContent = subtext;
-            }
+            elements.loadingText.textContent = text || '';
+            elements.loadingText.style.display = text ? '' : 'none';
+            elements.loadingSubtext.textContent = subtext || '';
+            elements.loadingSubtext.style.display = subtext ? '' : 'none';
+            // Show instantly — no fade-in
+            elements.loadingOverlay.style.transition = 'none';
             elements.loadingOverlay.classList.remove('hidden');
+            // Force reflow then re-enable transition for future fade-out
+            elements.loadingOverlay.offsetHeight;
+            elements.loadingOverlay.style.transition = '';
         }
 
         function hideLoading() {
@@ -995,22 +1007,22 @@
 
         function formatPaneLabel(pane) {
             const paneTitle = pane.pane_title || pane.pane_command || 'shell';
-            return `小窗口 ${pane.pane_index} · ${paneTitle}`;
+            return `Pane ${pane.pane_index} · ${paneTitle}`;
         }
 
         function updateStatusCopy() {
             const count = state.sessions.length;
             elements.statusPill.textContent = count ? `${count} sessions ready` : 'no sessions';
             const desktopRemembered = getDesktopRememberedSession();
-            elements.memoryPill.textContent = desktopRemembered ? `记住上次桌面会话：${desktopRemembered}` : '会记住上次桌面会话';
+            elements.memoryPill.textContent = desktopRemembered ? `Last session: ${desktopRemembered}` : 'Remembers last session';
         }
 
         function updateViewerCopy() {
             if (!state.activeName) {
-                elements.viewerTitle.textContent = '等待会话';
-                elements.viewerSubtitle.textContent = '读写 tmate 窗口';
-                elements.mobileHeaderTitle.textContent = '触屏选择会话';
-                elements.mobileHeaderSubtitle.textContent = '先选大的 tmux，再选小窗口';
+                elements.viewerTitle.textContent = 'Waiting';
+                elements.viewerSubtitle.textContent = 'Terminal view';
+                elements.mobileHeaderTitle.textContent = 'Select session';
+                elements.mobileHeaderSubtitle.textContent = 'Choose a session, then a pane';
                 document.title = 'cc-term';
                 return;
             }
@@ -1018,7 +1030,7 @@
             if (state.activePane) {
                 const paneText = formatPaneLabel(state.activePane);
                 elements.viewerTitle.textContent = `${state.activeName} · ${paneText}`;
-                elements.viewerSubtitle.textContent = '移动端：已切到目标 pane，并尽量只展示这个小窗口内容';
+                elements.viewerSubtitle.textContent = `Pane ${state.activePane.pane_index} focused`;
                 elements.mobileHeaderTitle.textContent = state.activeName;
                 elements.mobileHeaderSubtitle.textContent = paneText;
                 document.title = `${state.activeName} · pane ${state.activePane.pane_index} · cc-term`;
@@ -1028,9 +1040,9 @@
             const session = findSession(state.activeName);
             const windowCount = session ? session.windows || '?' : '?';
             elements.viewerTitle.textContent = state.activeName;
-            elements.viewerSubtitle.textContent = `桌面端完整读写视图 · ${windowCount} 个 tmux window`;
+            elements.viewerSubtitle.textContent = '';
             elements.mobileHeaderTitle.textContent = state.activeName;
-            elements.mobileHeaderSubtitle.textContent = '当前显示完整 session';
+            elements.mobileHeaderSubtitle.textContent = 'Full session view';
             document.title = `${state.activeName} · cc-term`;
         }
 
@@ -1042,13 +1054,12 @@
 
             elements.tabList.innerHTML = state.sessions.map((item) => {
                 const active = item.name === state.activeName ? ' active' : '';
-                const attachText = item.attached === '0' ? 'detached' : 'attached';
+                const nameDisplay = item.protected ? '🔒 ' + escapeHtml(item.name) : escapeHtml(item.name);
                 return `
                     <button class="tab-item${active}" type="button" data-session="${escapeHtml(item.name)}">
                         <span class="tab-glow"></span>
                         <span class="tab-copy">
-                            <strong>${escapeHtml(item.name)}</strong>
-                            <span>${escapeHtml(item.windows || '?')} windows · ${attachText}</span>
+                            <strong>${nameDisplay}</strong>
                         </span>
                     </button>
                 `;
@@ -1088,25 +1099,24 @@
 
         function renderMobileSessions() {
             const remembered = getMobileRememberedSession();
-            elements.mobileSheetTitle.textContent = '选择大的 tmux';
-            elements.mobileSheetSubtitle.textContent = '先点一个 session，再进入它下面的小窗口。';
-            elements.mobileBackButton.textContent = '关闭';
+            elements.mobileSheetTitle.textContent = 'Select session';
+            elements.mobileSheetSubtitle.textContent = 'Choose a session, then pick a pane.';
+            elements.mobileBackButton.textContent = 'Close';
 
             if (!state.sessions.length) {
-                elements.mobileSheetBody.innerHTML = '<div class="mobile-note">当前没有可用会话。先在本机运行 `cc-term -r &lt;name&gt;`，再回来刷新。</div>';
+                elements.mobileSheetBody.innerHTML = '<div class="mobile-note">No sessions available. Run <code>cc-term -r &lt;name&gt;</code> first, then refresh.</div>';
                 return;
             }
 
             elements.mobileSheetBody.innerHTML = `
-                <div class="mobile-note">移动端保留 tmate 整个框架，但为了更像本地触屏使用，选中小窗口后会把对应 pane 设为当前，并临时放大后再打开。</div>
                 <div class="mobile-list">
                     ${state.sessions.map((item) => {
                         const isRemembered = remembered && remembered === item.name;
+                        const nameDisplay = item.protected ? '🔒 ' + escapeHtml(item.name) : escapeHtml(item.name);
                         return `
                             <button class="mobile-card" type="button" data-mobile-session="${escapeHtml(item.name)}">
-                                <strong>${escapeHtml(item.name)}</strong>
-                                <span>${escapeHtml(item.windows || '?')} 个 tmux window · ${item.attached === '0' ? '本地未附着' : '本地已附着'}</span>
-                                ${isRemembered ? '<span class="badge">上次用过</span>' : ''}
+                                <strong>${nameDisplay}</strong>
+                                ${isRemembered ? '<span class="badge">Last used</span>' : ''}
                             </button>
                         `;
                     }).join('')}
@@ -1124,23 +1134,22 @@
             const sessionName = state.mobile.selectedSession;
             const groups = groupedPanes(state.mobile.panes);
             const remembered = getMobileRememberedPane(sessionName);
-            elements.mobileSheetTitle.textContent = `${sessionName} · 选择小窗口`;
-            elements.mobileSheetSubtitle.textContent = '这里的小窗口对应 tmux pane；进入后会优先展示你点选的那一块内容。';
-            elements.mobileBackButton.textContent = '上一步';
+            elements.mobileSheetTitle.textContent = `${sessionName} · Select pane`;
+            elements.mobileSheetSubtitle.textContent = 'Choose a tmux pane to focus on.';
+            elements.mobileBackButton.textContent = 'Back';
 
             if (!groups.length) {
-                elements.mobileSheetBody.innerHTML = '<div class="mobile-note">这个 session 还没有可用 pane，稍后再试。</div>';
+                elements.mobileSheetBody.innerHTML = '<div class="mobile-note">No panes available for this session yet.</div>';
                 return;
             }
 
             elements.mobileSheetBody.innerHTML = `
-                <div class="mobile-note">为了尽量只显示你选中的小窗口，进入时会自动切到对应 pane，并尝试把它放大为当前视图。这个动作会影响该 tmux session 当前的活动视图。</div>
                 <div class="mobile-pane-groups">
                     ${groups.map((group) => `
                         <section class="mobile-pane-group">
                             <div class="mobile-pane-group-head">
                                 <strong>Window ${escapeHtml(group.window_index)} · ${escapeHtml(group.window_name)}</strong>
-                                <span>${group.panes.length} 个小窗口</span>
+                                <span>${group.panes.length} panes</span>
                             </div>
                             <div class="mobile-pane-items">
                                 ${group.panes.map((pane) => {
@@ -1150,7 +1159,7 @@
                                         <button class="mobile-pane-card${active ? ' active' : ''}" type="button" data-window="${escapeHtml(pane.window_index)}" data-pane="${escapeHtml(pane.pane_index)}">
                                             <strong>${escapeHtml(formatPaneLabel(pane))}</strong>
                                             <span>${escapeHtml(pane.window_name || '')}</span>
-                                            ${rememberedMatch ? '<span class="badge">上次打开</span>' : ''}
+                                            ${rememberedMatch ? '<span class="badge">Last opened</span>' : ''}
                                         </button>
                                     `;
                                 }).join('')}
@@ -1189,27 +1198,62 @@
             }
         }
 
+        function _replaceFrame() {
+            const oldFrame = elements.frame;
+            const newFrame = document.createElement('iframe');
+            newFrame.id = 'session-frame';
+            newFrame.title = 'tmate session';
+            newFrame.referrerPolicy = 'no-referrer';
+            newFrame.style.opacity = '0';
+            newFrame.addEventListener('load', () => {
+                let isRealContent = false;
+                try {
+                    isRealContent = newFrame.contentWindow.location.href !== 'about:blank';
+                } catch (_) {
+                    isRealContent = true; // cross-origin = real content
+                }
+                if (isRealContent) {
+                    // Wait for xterm.js to paint, then fade content in
+                    requestAnimationFrame(() => {
+                        setTimeout(() => {
+                            newFrame.style.opacity = '1';
+                            hideLoading();
+                        }, 350);
+                    });
+                } else {
+                    try { newFrame.contentDocument.body.style.background = '#101010'; } catch (_) {}
+                }
+                try {
+                    newFrame.contentWindow.addEventListener('keydown', (event) => {
+                        if (event.metaKey && !event.ctrlKey && !event.altKey &&
+                            (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                            event.preventDefault();
+                            cycleDesktopSessions(event.key === 'ArrowUp' ? -1 : 1);
+                        }
+                    });
+                } catch (_) { /* cross-origin — ignore */ }
+            });
+            oldFrame.parentNode.replaceChild(newFrame, oldFrame);
+            elements.frame = newFrame;
+        }
+
         async function loadFrame(item, options = {}) {
             if (!item) {
-                elements.frame.removeAttribute('src');
+                _replaceFrame();
                 elements.frame.removeAttribute('data-current-url');
                 return;
             }
 
             const url = sessionLaunchUrl(item);
             const currentUrl = elements.frame.getAttribute('data-current-url') || '';
-            const needsHardReload = Boolean(options.forceReload || currentUrl === url);
-            elements.frame.setAttribute('data-current-url', url);
-            showLoading(options.loadingText || '正在打开 tmate 读写窗口…', options.loadingSubtext || '');
 
-            if (needsHardReload) {
-                elements.frame.removeAttribute('src');
-                requestAnimationFrame(() => {
-                    elements.frame.src = url;
-                });
+            // Already showing this URL — skip unless explicitly force-reloading
+            if (currentUrl === url && !options.forceReload) {
                 return;
             }
 
+            _replaceFrame();
+            elements.frame.setAttribute('data-current-url', url);
             elements.frame.src = url;
         }
 
@@ -1217,6 +1261,37 @@
             const item = findSession(name);
             if (!item) {
                 return;
+            }
+
+            // Check if session is protected and needs authentication
+            if (item.protected) {
+                const authKey = `auth_${name}`;
+                let authHeader = sessionStorage.getItem(authKey);
+
+                if (!authHeader) {
+                    const username = prompt(`Session "${name}" requires authentication\n\nUsername:`);
+                    if (!username) return;
+                    const password = prompt(`Password:`);
+                    if (!password) return;
+                    authHeader = btoa(`${username}:${password}`);
+                    sessionStorage.setItem(authKey, authHeader);
+                }
+
+                // Test authentication by fetching the URL
+                const url = sessionLaunchUrl(item);
+                try {
+                    const response = await fetch(url, {
+                        method: 'HEAD',
+                        headers: { 'Authorization': `Basic ${authHeader}` }
+                    });
+                    if (response.status === 401) {
+                        sessionStorage.removeItem(authKey);
+                        alert('Authentication failed, please try again');
+                        return;
+                    }
+                } catch (e) {
+                    // Continue anyway, let iframe handle it
+                }
             }
 
             state.activeName = item.name;
@@ -1230,8 +1305,7 @@
             await normalizeSession(item.name);
             await loadFrame(item, {
                 forceReload: options.forceReload !== false,
-                loadingText: '正在恢复完整 tmux 视图…',
-                loadingSubtext: '桌面端会自动取消移动端可能留下的 pane 放大状态，让体验更像本地 iTerm2。',
+                loadingText: 'Restoring tmux view...',
             });
         }
 
@@ -1239,7 +1313,7 @@
             state.mobile.selectedSession = name;
             state.mobile.stage = 'panes';
             rememberMobileSession(name);
-            showLoading('正在读取这个 tmux 里的小窗口…', '会把 tmux pane 列出来，方便你直接点选。');
+            showLoading('Loading panes...', '');
             try {
                 state.mobile.panes = await fetchJson(`/api/panes?session=${encodeURIComponent(name)}`);
             } catch (_) {
@@ -1261,7 +1335,7 @@
                 return;
             }
 
-            showLoading('正在打开你选中的小窗口…', '会先切到对应 pane，并尝试放大它，然后再进入 tmate 读写视图。');
+            showLoading('Opening pane...', '');
             await postJson('/api/select-pane', {
                 session: sessionName,
                 window: String(windowIndex),
@@ -1281,8 +1355,7 @@
             renderMobileSheet();
             await loadFrame(item, {
                 forceReload: true,
-                loadingText: '正在进入小窗口内容…',
-                loadingSubtext: '这个视图仍然基于 tmate，但已尽量把你点选的 pane 变成当前主内容。',
+                loadingText: 'Entering pane view...',
             });
         }
 
@@ -1308,14 +1381,18 @@
 
         async function loadSessions(options = {}) {
             if (!options.silent) {
-                elements.sessionSummary.textContent = '正在刷新会话列表…';
+                elements.sessionSummary.textContent = 'Loading sessions...';
             }
 
             try {
-                const raw = await fetchJson('/api/sessions');
+                const aggKey = window.location.pathname.replace(/^\//, '').replace(/\/.*$/, '');
+                const sessionsUrl = aggKey ? '/api/sessions?agg_key=' + encodeURIComponent(aggKey) : '/api/sessions';
+                const raw = await fetchJson(sessionsUrl);
                 const items = sortSessions((raw || []).filter((item) => sessionLaunchUrl(item)));
                 const previousActiveName = state.activeName;
+                const prevCount = state.sessions.length;
                 state.sessions = items;
+                if (items.length !== prevCount) scheduleRefresh();
                 updateStatusCopy();
                 renderDesktopTabs();
 
@@ -1328,15 +1405,15 @@
                     updateViewerCopy();
                     renderDesktopTabs();
                     renderMobileSheet();
-                    elements.frame.removeAttribute('src');
+                    _replaceFrame();
                     elements.frame.removeAttribute('data-current-url');
-                    elements.sessionSummary.textContent = '没有已注册会话';
+                    elements.sessionSummary.textContent = 'No sessions registered';
                     setEmptyState(true);
                     hideLoading();
                     return;
                 }
 
-                elements.sessionSummary.textContent = `${items.length} 个会话`;
+                elements.sessionSummary.textContent = `${items.length} sessions`;
                 setEmptyState(false);
 
                 if (state.mode === 'desktop') {
@@ -1346,10 +1423,13 @@
                         items.find((item) => item.name === remembered) ||
                         items[0]
                     );
-                    const currentItem = findSession(desired.name);
-                    const currentUrl = elements.frame.getAttribute('data-current-url') || '';
-                    const nextUrl = currentItem ? sessionLaunchUrl(currentItem) : '';
-                    await activateDesktopSession(desired.name, { forceReload: currentUrl !== nextUrl || desired.name !== previousActiveName || !options.silent });
+
+                    // Silent poll with same active session — tabs already re-rendered, skip
+                    if (options.silent && desired.name === previousActiveName) {
+                        hideLoading();
+                    } else {
+                        await activateDesktopSession(desired.name, { forceReload: true });
+                    }
                 } else {
                     const rememberedMobileSession = getMobileRememberedSession();
                     if (!state.mobile.selectedSession || !items.some((item) => item.name === state.mobile.selectedSession)) {
@@ -1362,7 +1442,7 @@
                     renderMobileSheet();
                 }
             } catch (_) {
-                elements.sessionSummary.textContent = '会话加载失败';
+                elements.sessionSummary.textContent = 'Failed to load sessions';
                 elements.statusPill.textContent = 'load failed';
                 if (!state.sessions.length) {
                     setEmptyState(true);
@@ -1373,10 +1453,6 @@
 
         elements.refreshButton.addEventListener('click', () => {
             loadSessions();
-        });
-
-        elements.frame.addEventListener('load', () => {
-            hideLoading();
         });
 
         elements.mobileSessionButton.addEventListener('click', () => {
@@ -1434,7 +1510,12 @@
         updateStatusCopy();
         updateViewerCopy();
         loadSessions({ silent: false });
-        state.refreshTimer = window.setInterval(() => loadSessions({ silent: true }), 15000);
+        function scheduleRefresh() {
+            clearInterval(state.refreshTimer);
+            const interval = state.sessions.length ? 5000 : 1000;
+            state.refreshTimer = window.setInterval(() => loadSessions({ silent: true }), interval);
+        }
+        scheduleRefresh();
     </script>
 </body>
 </html>

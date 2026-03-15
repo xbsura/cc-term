@@ -281,6 +281,18 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
     connect(name);
   };
 
+  window.connectProtectedSession = function(name, proxyPath) {
+    const username = prompt(`Session "${name}" is protected.\n\nUsername:`);
+    if (!username) return;
+    const password = prompt(`Password:`);
+    if (!password) return;
+
+    // Store credentials for this session
+    sessionStorage.setItem(`auth_${name}`, btoa(`${username}:${password}`));
+    term.clear();
+    connect(name, proxyPath);
+  };
+
   function loadSessions() {
     fetch(`/api/sessions?token=${TOKEN}`)
       .then(r => r.json())
@@ -292,8 +304,10 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
         </div>`;
         sessions.forEach(s => {
           const badge = s.attached > 0 ? ' (attached)' : '';
-          html += `<div class="session-card" onclick="connectSession('${s.name}')">
-            <div class="name">${s.name}${badge}</div>
+          const nameDisplay = s.protected ? '🔒 ' + s.name : s.name;
+          const onclick = s.protected ? `connectProtectedSession('${s.name}', '${s.proxy_path}')` : `connectSession('${s.name}')`;
+          html += `<div class="session-card" onclick="${onclick}">
+            <div class="name">${nameDisplay}${badge}</div>
             <div class="meta">${s.windows} window(s)</div>
           </div>`;
         });
@@ -336,6 +350,12 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
     term.focus();
     setTimeout(pollWindows, 500);
   };
+
+  // ---- Prevent "Leave site?" prompt ----
+  window.addEventListener('beforeunload', function(e) {
+    // Don't show browser warning when leaving the page
+    delete e['returnValue'];
+  });
 
   // ---- Initial load ----
   document.getElementById('session-panel').classList.add('show');

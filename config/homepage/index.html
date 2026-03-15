@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>cc-term — AI Terminal for macOS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--bg2:#12121a;--fg:#c8d0e0;--accent:#6af;--green:#57d37c;
+  --red:#ff5f5f;--yellow:#ffd75f;--border:#222;--pixel: 'Press Start 2P', monospace;
+  --mono: 'JetBrains Mono', 'Menlo', monospace;
+}
+html{background:var(--bg);color:var(--fg);font-family:var(--mono);scroll-behavior:smooth}
+body{overflow-x:hidden}
+
+/* ---- Scanline overlay ---- */
+body::before{
+  content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+}
+
+/* ---- Nav ---- */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;height:52px;
+  background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo{font-family:var(--pixel);font-size:11px;color:var(--accent);letter-spacing:1px}
+.nav-links{display:flex;gap:20px}
+.nav-links a{color:var(--fg);text-decoration:none;font-size:13px;opacity:0.7;transition:opacity .2s}
+.nav-links a:hover{opacity:1;color:var(--accent)}
+
+/* ---- Hero ---- */
+.hero{
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:80px 24px 60px;
+  background:radial-gradient(ellipse at 50% 30%,rgba(106,170,255,0.06) 0%,transparent 60%);
+}
+.hero-badge{
+  display:inline-block;font-family:var(--pixel);font-size:9px;color:var(--green);
+  border:1px solid var(--green);padding:4px 12px;margin-bottom:24px;letter-spacing:1px;
+  animation:blink-border 3s ease-in-out infinite;
+}
+@keyframes blink-border{0%,100%{border-color:var(--green)}50%{border-color:transparent}}
+.hero h1{
+  font-family:var(--pixel);font-size:clamp(18px,4vw,36px);color:#fff;
+  line-height:1.6;margin-bottom:16px;
+}
+.hero h1 .accent{color:var(--accent)}
+.hero-sub{font-size:15px;color:#888;max-width:520px;line-height:1.7;margin-bottom:40px}
+.hero-cmd{
+  background:var(--bg2);border:1px solid var(--border);border-radius:6px;
+  padding:14px 28px;font-size:14px;color:var(--green);font-family:var(--mono);
+  display:inline-flex;align-items:center;gap:10px;cursor:pointer;
+  transition:border-color .2s;position:relative;
+}
+.hero-cmd:hover{border-color:var(--accent)}
+.hero-cmd .prompt{color:#555}
+.hero-cmd .copy-hint{
+  position:absolute;top:-28px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:var(--accent);opacity:0;transition:opacity .2s;
+  font-family:var(--mono);white-space:nowrap;
+}
+.hero-cmd:hover .copy-hint{opacity:1}
+
+/* ---- Pixel art terminal mock ---- */
+.terminal-mock{
+  margin-top:48px;width:min(680px,100%);background:var(--bg2);border:1px solid var(--border);
+  border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);
+  text-align:left;
+}
+.terminal-bar{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:#1a1a24;border-bottom:1px solid var(--border);
+}
+.terminal-dot{width:10px;height:10px;border-radius:50%}
+.terminal-dot.r{background:var(--red)}.terminal-dot.y{background:var(--yellow)}.terminal-dot.g{background:var(--green)}
+.terminal-body{padding:16px 18px;font-size:13px;line-height:1.8}
+.terminal-body .line{display:block}
+.terminal-body .ps1{color:var(--green)}
+.terminal-body .cmd{color:#fff}
+.terminal-body .out{color:#888}
+.terminal-body .cursor{
+  display:inline-block;width:8px;height:15px;background:var(--accent);
+  animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ---- Sections ---- */
+section{padding:80px 24px}
+.section-inner{max-width:900px;margin:0 auto}
+.section-tag{
+  font-family:var(--pixel);font-size:9px;color:var(--accent);letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:12px;
+}
+.section-title{
+  font-family:var(--pixel);font-size:clamp(13px,2.5vw,18px);color:#fff;
+  line-height:1.6;margin-bottom:32px;
+}
+
+/* ---- Feature grid ---- */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.feat{
+  background:var(--bg2);border:1px solid var(--border);border-radius:6px;
+  padding:24px;transition:border-color .2s;
+}
+.feat:hover{border-color:var(--accent)}
+.feat-icon{font-size:20px;margin-bottom:10px;display:block}
+.feat h3{font-size:14px;color:#fff;margin-bottom:8px}
+.feat p{font-size:12px;color:#888;line-height:1.7}
+
+/* ---- How it works ---- */
+.steps{counter-reset:step}
+.step{
+  display:flex;gap:20px;align-items:flex-start;margin-bottom:28px;
+  counter-increment:step;
+}
+.step::before{
+  content:counter(step);font-family:var(--pixel);font-size:18px;
+  color:var(--accent);flex-shrink:0;width:40px;text-align:center;
+  line-height:1.8;
+}
+.step-body h3{font-size:14px;color:#fff;margin-bottom:6px}
+.step-body p{font-size:12px;color:#888;line-height:1.7}
+.step-body code{
+  background:var(--bg);padding:2px 8px;border-radius:3px;
+  font-size:12px;color:var(--green);border:1px solid var(--border);
+}
+
+/* ---- Platforms ---- */
+.platform-grid{display:flex;gap:20px;flex-wrap:wrap}
+.platform{
+  flex:1;min-width:200px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:6px;padding:24px;text-align:center;
+}
+.platform.supported{border-color:var(--green)}
+.platform.coming{opacity:0.5}
+.platform-icon{font-size:28px;margin-bottom:8px;display:block}
+.platform h3{font-size:13px;color:#fff;margin-bottom:6px}
+.platform p{font-size:11px;color:#888}
+.platform .badge{
+  display:inline-block;font-family:var(--pixel);font-size:8px;
+  padding:3px 8px;border-radius:3px;margin-top:8px;
+}
+.badge-ok{background:rgba(87,211,124,0.15);color:var(--green);border:1px solid rgba(87,211,124,0.3)}
+.badge-no{background:rgba(255,95,95,0.1);color:var(--red);border:1px solid rgba(255,95,95,0.2)}
+
+/* ---- CTA ---- */
+.cta{text-align:center;padding:80px 24px 100px}
+.cta-title{font-family:var(--pixel);font-size:clamp(12px,2vw,16px);color:#fff;margin-bottom:16px;line-height:1.6}
+.cta-sub{font-size:13px;color:#888;margin-bottom:32px}
+
+/* ---- Footer ---- */
+footer{
+  text-align:center;padding:32px 24px;border-top:1px solid var(--border);
+  font-size:11px;color:#555;
+}
+footer a{color:var(--accent);text-decoration:none}
+
+/* ---- Mobile ---- */
+@media(max-width:600px){
+  nav{padding:0 14px}
+  .hero{padding:100px 16px 40px}
+  .terminal-mock{margin-top:32px}
+  section{padding:48px 16px}
+  .features{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">&gt; cc-term</div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how">How It Works</a>
+    <a href="/docs">Docs</a>
+    <a href="https://github.com/nicexe/cc-terminal" target="_blank">GitHub</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">v1.0 &mdash; OPEN SOURCE</div>
+  <h1>Your <span class="accent">AI coding terminal</span><br>anywhere you go.</h1>
+  <p class="hero-sub">
+    A self-hosted terminal environment built for Claude Code.
+    Access your dev sessions from any browser, any device.
+    No signup. No cloud lock-in. Just run it.
+  </p>
+  <div class="hero-cmd" onclick="navigator.clipboard.writeText('curl -fsSL https://ttyd.ink/install | bash')">
+    <span class="copy-hint">click to copy</span>
+    <span class="prompt">$</span> curl -fsSL https://ttyd.ink/install | bash
+  </div>
+
+  <div class="terminal-mock">
+    <div class="terminal-bar">
+      <div class="terminal-dot r"></div>
+      <div class="terminal-dot y"></div>
+      <div class="terminal-dot g"></div>
+    </div>
+    <div class="terminal-body">
+      <span class="line"><span class="ps1">~ $</span> <span class="cmd">cc-term</span></span>
+      <span class="line"><span class="out">[cc-term] Opening session: main</span></span>
+      <span class="line"><span class="out">[cc-term] tmux attached.</span></span>
+      <span class="line">&nbsp;</span>
+      <span class="line"><span class="ps1">main:1 $</span> <span class="cmd">cc-term -r</span></span>
+      <span class="line"><span class="out">[cc-term] Registering: main</span></span>
+      <span class="line"><span class="out">  Registered: main</span></span>
+      <span class="line"><span class="out">  URL: https://ttyd.ink/t/a8f3...</span></span>
+      <span class="line">&nbsp;</span>
+      <span class="line"><span class="ps1">main:1 $</span> <span class="cursor"></span></span>
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="section-inner">
+    <div class="section-tag">// features</div>
+    <div class="section-title">Everything you need.<br>Nothing you don't.</div>
+    <div class="features">
+      <div class="feat">
+        <span class="feat-icon">&gt;_</span>
+        <h3>Instant Terminal Sharing</h3>
+        <p>One command to expose any tmux session over the web. Share a URL, open on your phone. Done.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#9638;</span>
+        <h3>Multi-Session Dashboard</h3>
+        <p>See all your sessions in one page. Click to connect. Switch panes. Split views. All in the browser.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#9889;</span>
+        <h3>Zero Config</h3>
+        <p>No accounts. No signup. No API keys for the terminal itself. Install, run, done. Close it when you're done.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#128241;</span>
+        <h3>Mobile-First Web UI</h3>
+        <p>Responsive terminal with virtual keys, gesture support, and optimized touch layout. Works on any device.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#128274;</span>
+        <h3>Session Protection</h3>
+        <p>Optional username/password per session. Private sessions hidden from the global page. You control access.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#127760;</span>
+        <h3>Tunnel Through NAT</h3>
+        <p>Built-in reverse tunnel to ttyd.ink. Works behind firewalls, no port forwarding needed.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#9881;</span>
+        <h3>Built for Claude Code</h3>
+        <p>Pre-configured tmux, vim, and bash. Session persistence, auto-save, and restore. Optimized for AI workflows.</p>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">&#128230;</span>
+        <h3>Fully Self-Contained</h3>
+        <p>Isolated under ~/.cc-term. Own Python venv, own tmux config, own plugins. Won't touch your existing setup.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="background:var(--bg2)">
+  <div class="section-inner">
+    <div class="section-tag">// how it works</div>
+    <div class="section-title">Three commands. That's it.</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-body">
+          <h3>Install</h3>
+          <p>Run the installer. It sets up brew dependencies, tmux, vim, and the cc-term toolkit.</p>
+          <p style="margin-top:8px"><code>curl -fsSL https://ttyd.ink/install | bash</code></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <h3>Launch a session</h3>
+          <p>Start a new terminal session or attach to an existing one. Named sessions persist across restarts.</p>
+          <p style="margin-top:8px"><code>cc-term</code> &nbsp;or&nbsp; <code>cc-term myproject</code></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <h3>Go remote</h3>
+          <p>Inside any session window, enable remote access. Get a URL, scan the QR code, open on your phone.</p>
+          <p style="margin-top:8px"><code>cc-term -r</code></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="platform">
+  <div class="section-inner">
+    <div class="section-tag">// compatibility</div>
+    <div class="section-title">Host on Mac. Access anywhere.</div>
+    <div class="platform-grid">
+      <div class="platform supported">
+        <span class="platform-icon">&#63743;</span>
+        <h3>macOS</h3>
+        <p>Full support. Intel &amp; Apple Silicon. Homebrew-based install.</p>
+        <span class="badge badge-ok">SUPPORTED</span>
+      </div>
+      <div class="platform supported">
+        <span class="platform-icon">&#127760;</span>
+        <h3>Web Browser</h3>
+        <p>Access sessions from any modern browser. Desktop or mobile.</p>
+        <span class="badge badge-ok">ANY DEVICE</span>
+      </div>
+      <div class="platform coming">
+        <span class="platform-icon">&#128039;</span>
+        <h3>Linux</h3>
+        <p>Not yet supported. Contributions welcome.</p>
+        <span class="badge badge-no">PLANNED</span>
+      </div>
+      <div class="platform coming">
+        <span class="platform-icon">&#9632;</span>
+        <h3>Windows</h3>
+        <p>Not supported. Use WSL + browser access instead.</p>
+        <span class="badge badge-no">N/A</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="cta">
+  <div class="cta-title">Ready to start?</div>
+  <p class="cta-sub">Install in under a minute. No signup required.</p>
+  <div class="hero-cmd" onclick="navigator.clipboard.writeText('curl -fsSL https://ttyd.ink/install | bash')">
+    <span class="copy-hint">click to copy</span>
+    <span class="prompt">$</span> curl -fsSL https://ttyd.ink/install | bash
+  </div>
+</div>
+
+<footer>
+  <p>cc-term &mdash; built for developers who code with AI.</p>
+  <p style="margin-top:6px"><a href="/docs">Docs</a> &middot; <a href="https://github.com/nicexe/cc-terminal">GitHub</a></p>
+</footer>
+
+</body>
+</html>

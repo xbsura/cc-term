@@ -9,10 +9,14 @@ BASH_PROFILE="$CC_HOME/config/bash_profile"
 REMOTE_SERVER="$CC_HOME/bin/cc-remote-server.py"
 RELAY_SERVER="$CC_HOME/bin/cc-relay-server.py"
 PROXY_SERVER="$CC_HOME/bin/cc-proxy-server.py"
+TUNNEL_CLIENT="$CC_HOME/bin/cc-tunnel-client.py"
 STATE_MANAGER="$CC_HOME/bin/cc-state-manager.py"
 PROVIDER_MANAGER="$CC_HOME/bin/cc-provider-manager.py"
 REMOTE_PID_DIR="$CC_HOME/run"
 PRIVATE_SESSIONS_FILE="$CC_HOME/run/private_sessions"
+DEFAULT_PROXY_HOST="${CC_PROXY_HOST:-ttyd.ink}"
+DEFAULT_PROXY_PORT="${CC_PROXY_PORT:-443}"
+DEFAULT_PROXY_PROTOCOL="${CC_PROXY_PROTOCOL:-https}"
 
 TTYD_THEME='{"background":"#121212","foreground":"#bbbbbb","cursor":"#bbbbbb","black":"#121212","red":"#fa2573","green":"#97e123","yellow":"#dfd460","blue":"#0f7fcf","magenta":"#8700ff","cyan":"#42a7cf","white":"#bbbbbb","brightBlack":"#555555","brightRed":"#f5669c","brightGreen":"#b0e05e","brightYellow":"#fef26c","brightBlue":"#00afff","brightMagenta":"#af87ff","brightCyan":"#50cdfe","brightWhite":"#ffffff"}'
 
@@ -47,6 +51,88 @@ get_local_ip() {
     [[ -z "$ip" ]] && ip=$(ipconfig getifaddr en1 2>/dev/null)
     [[ -z "$ip" ]] && ip="127.0.0.1"
     echo "$ip"
+}
+
+get_or_create_agg_credentials() {
+    local proxy_host="$1"
+    local proxy_port="$2"
+    local cred_file="$CC_HOME/run/agg_credentials.json"
+    local host_key="${proxy_host}:${proxy_port}"
+    mkdir -p "$REMOTE_PID_DIR"
+
+    # Try to read existing credentials for this host:port
+    local existing
+    existing=$(HOST_KEY="$host_key" CRED_FILE="$cred_file" "$CC_PYTHON" -c "
+import json, os
+try:
+    with open(os.environ['CRED_FILE']) as f:
+        data = json.load(f)
+    entry = data.get(os.environ['HOST_KEY'], {})
+    if entry.get('agg_key') and entry.get('agg_secret'):
+        print(entry['agg_key'] + '|' + entry['agg_secret'])
+    else:
+        print('')
+except Exception:
+    print('')
+" 2>/dev/null)
+
+    if [[ -n "$existing" ]]; then
+        AGG_KEY="${existing%%|*}"
+        AGG_SECRET="${existing#*|}"
+        return 0
+    fi
+
+    # Request new credentials from server
+    local result
+    result=$(PROXY_HOST="$proxy_host" PROXY_PORT="$proxy_port" "$CC_PYTHON" -c "
+import http.client, json, os, sys, ssl
+try:
+    host = os.environ['PROXY_HOST']
+    port = int(os.environ['PROXY_PORT'])
+    if port == 443:
+        conn = http.client.HTTPSConnection(host, port, timeout=10, context=ssl._create_unverified_context())
+    else:
+        conn = http.client.HTTPConnection(host, port, timeout=10)
+    conn.request('POST', '/api/agg/new', '', {'Content-Type': 'application/json'})
+    resp = conn.getresponse()
+    raw = resp.read().decode()
+    conn.close()
+    if resp.status != 200:
+        print('', file=sys.stderr)
+        sys.exit(1)
+    data = json.loads(raw)
+    print(data['agg_key'] + '|' + data['agg_secret'])
+except Exception as exc:
+    print(str(exc), file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+
+    if [[ $? -ne 0 || -z "$result" ]]; then
+        err "Failed to obtain aggregate credentials from ${proxy_host}:${proxy_port}"
+        return 1
+    fi
+
+    AGG_KEY="${result%%|*}"
+    AGG_SECRET="${result#*|}"
+
+    # Save to credentials file
+    HOST_KEY="$host_key" AGG_KEY="$AGG_KEY" AGG_SECRET="$AGG_SECRET" CRED_FILE="$cred_file" "$CC_PYTHON" -c "
+import json, os
+cred_file = os.environ['CRED_FILE']
+try:
+    with open(cred_file) as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+data[os.environ['HOST_KEY']] = {
+    'agg_key': os.environ['AGG_KEY'],
+    'agg_secret': os.environ['AGG_SECRET'],
+}
+with open(cred_file, 'w') as f:
+    json.dump(data, f, indent=2)
+" >/dev/null 2>&1
+
+    return 0
 }
 
 show_qr() {
@@ -157,7 +243,7 @@ ttyd_meta_path() {
 stop_ttyd_registration() {
     local session_name="$1"
     local proxy_port="${2:-9999}"
-    local meta_file info token ttyd_pid
+    local meta_file info token ttyd_pid tunnel_pid
     meta_file=$(ttyd_meta_path "$session_name")
     [[ -f "$meta_file" ]] || return 0
 
@@ -166,26 +252,34 @@ import json, os
 try:
     with open(os.environ['META_FILE']) as f:
         data = json.load(f)
-    print('%s|%s' % (data.get('token', ''), data.get('pid', '')))
+    print('%s|%s|%s' % (data.get('token', ''), data.get('pid', ''), data.get('tunnel_pid', '')))
 except Exception:
-    print('|')
+    print('||')
 ")
     token=${info%%|*}
-    ttyd_pid=${info#*|}
+    local rest=${info#*|}
+    ttyd_pid=${rest%%|*}
+    tunnel_pid=${rest#*|}
 
     unregister_proxy_token "$token" "$proxy_port"
     if [[ -n "$ttyd_pid" ]]; then
         kill "$ttyd_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$tunnel_pid" && "$tunnel_pid" != "0" ]]; then
+        kill "$tunnel_pid" 2>/dev/null || true
     fi
     rm -f "$meta_file"
 }
 
 register_ttyd_session() {
     local session_name="$1"
-    local proxy_port="${2:-9999}"
-    local local_ip="$3"
-    local meta_file ttyd_port token register_result proxy_path ttyd_pid
-    local session_meta windows attached
+    local proxy_host="${2:-$DEFAULT_PROXY_HOST}"
+    local proxy_port="${3:-$DEFAULT_PROXY_PORT}"
+    local username="${4:-}"
+    local password="${5:-}"
+    local meta_file ttyd_port token register_result proxy_path ttyd_pid tunnel_pid
+    local session_meta windows attached remote_ttyd_port
+    local AGG_KEY AGG_SECRET
 
     if ! command -v ttyd >/dev/null 2>&1; then
         err "ttyd is not installed. Install it first with: brew install ttyd"
@@ -203,6 +297,13 @@ register_ttyd_session() {
     meta_file=$(ttyd_meta_path "$session_name")
     ttyd_port=$(find_free_port 17681)
     token=$(openssl rand -hex 12)
+
+    # Determine if tunnel is needed for remote proxy
+    if [[ "$proxy_host" != "127.0.0.1" && "$proxy_host" != "localhost" ]]; then
+        USE_TUNNEL=1
+    else
+        USE_TUNNEL=0
+    fi
 
     ttyd -W -p "$ttyd_port" \
         --base-path "/t/${token}" \
@@ -228,19 +329,37 @@ register_ttyd_session() {
     [[ -z "$windows" || "$windows" == "$session_meta" ]] && windows="?"
     [[ -z "$attached" || "$attached" == "$session_meta" ]] && attached="0"
 
-    register_result=$(SESSION_NAME="$session_name" TTYD_PORT="$ttyd_port" TOKEN="$token" WINDOWS="$windows" ATTACHED="$attached" PROXY_PORT="$proxy_port" "$CC_PYTHON" -c "
-import http.client, json, os, sys
+    # Obtain aggregate credentials
+    if ! get_or_create_agg_credentials "$proxy_host" "$proxy_port"; then
+        kill "$ttyd_pid" 2>/dev/null || true
+        return 1
+    fi
+
+    register_result=$(SESSION_NAME="$session_name" TTYD_PORT="$ttyd_port" TOKEN="$token" WINDOWS="$windows" ATTACHED="$attached" PROXY_HOST="$proxy_host" PROXY_PORT="$proxy_port" USERNAME="$username" PASSWORD="$password" USE_TUNNEL="$USE_TUNNEL" AGG_KEY="$AGG_KEY" AGG_SECRET="$AGG_SECRET" "$CC_PYTHON" -c "
+import http.client, json, os, sys, ssl
+use_tunnel = os.environ.get('USE_TUNNEL', '0') == '1'
 body = json.dumps({
-    'kind': 'ttyd',
+    'kind': 'tunnel' if use_tunnel else 'ttyd',
     'name': os.environ['SESSION_NAME'],
     'label': os.environ['SESSION_NAME'],
-    'port': int(os.environ['TTYD_PORT']),
+    'port': 0 if use_tunnel else int(os.environ['TTYD_PORT']),
     'token': os.environ['TOKEN'],
     'windows': os.environ['WINDOWS'],
     'attached': os.environ['ATTACHED'],
+    'username': os.environ.get('USERNAME', ''),
+    'password': os.environ.get('PASSWORD', ''),
+    'agg_key': os.environ['AGG_KEY'],
+    'agg_secret': os.environ['AGG_SECRET'],
 })
 try:
-    conn = http.client.HTTPConnection('localhost', int(os.environ['PROXY_PORT']), timeout=5)
+    host = os.environ['PROXY_HOST']
+    port = int(os.environ['PROXY_PORT'])
+
+    if port == 443:
+        conn = http.client.HTTPSConnection(host, port, timeout=10, context=ssl._create_unverified_context())
+    else:
+        conn = http.client.HTTPConnection(host, port, timeout=10)
+
     conn.request('POST', '/api/register', body, {'Content-Type': 'application/json'})
     resp = conn.getresponse()
     raw = resp.read().decode()
@@ -255,7 +374,7 @@ except Exception as exc:
 " 2>/dev/null)
 
     if [[ $? -ne 0 || -z "$register_result" ]]; then
-        err "Failed to register '$session_name' with proxy server at localhost:${proxy_port}"
+        err "Failed to register '$session_name' with proxy server at ${proxy_host}:${proxy_port}"
         kill "$ttyd_pid" 2>/dev/null || true
         return 1
     fi
@@ -268,7 +387,34 @@ except Exception as exc:
         return 1
     fi
 
-    META_FILE="$meta_file" SESSION_NAME="$session_name" TOKEN="$token" PID="$ttyd_pid" TTYD_PORT="$ttyd_port" WINDOWS="$windows" ATTACHED="$attached" PROXY_PATH="$proxy_path" "$CC_PYTHON" -c "
+    # Start tunnel client for remote proxy
+    tunnel_pid=""
+    if [[ "$USE_TUNNEL" -eq 1 ]]; then
+        local tunnel_server
+        if [[ "$proxy_port" == "443" ]]; then
+            tunnel_server="wss://${proxy_host}"
+        else
+            tunnel_server="ws://${proxy_host}:${proxy_port}"
+        fi
+        info "Starting tunnel to $proxy_host..."
+        "$CC_PYTHON" "$TUNNEL_CLIENT" \
+            --server "$tunnel_server" \
+            --token "$token" \
+            --local-port "$ttyd_port" \
+            --agg-key "$AGG_KEY" \
+            --agg-secret "$AGG_SECRET" \
+            --name "$session_name" \
+            >/dev/null 2>&1 &
+        tunnel_pid=$!
+        sleep 1
+        if ! kill -0 "$tunnel_pid" 2>/dev/null; then
+            err "Failed to start tunnel client for session '$session_name'."
+            kill "$ttyd_pid" 2>/dev/null || true
+            return 1
+        fi
+    fi
+
+    META_FILE="$meta_file" SESSION_NAME="$session_name" TOKEN="$token" PID="$ttyd_pid" TTYD_PORT="$ttyd_port" WINDOWS="$windows" ATTACHED="$attached" PROXY_PATH="$proxy_path" TUNNEL_PID="${tunnel_pid:-0}" AGG_KEY="$AGG_KEY" "$CC_PYTHON" -c "
 import json, os
 with open(os.environ['META_FILE'], 'w') as f:
     json.dump({
@@ -279,11 +425,19 @@ with open(os.environ['META_FILE'], 'w') as f:
         'windows': os.environ['WINDOWS'],
         'attached': os.environ['ATTACHED'],
         'proxy_path': os.environ['PROXY_PATH'],
+        'tunnel_pid': int(os.environ['TUNNEL_PID']),
+        'agg_key': os.environ['AGG_KEY'],
     }, f, indent=2, sort_keys=True)
 " >/dev/null 2>&1
 
-    TTYD_REGISTERED_URL="http://${local_ip}:${proxy_port}${proxy_path}"
-    TTYD_AGGREGATE_URL="http://${local_ip}:${proxy_port}/"
+    # Build URLs based on proxy configuration
+    if [[ "$proxy_port" == "443" ]]; then
+        TTYD_REGISTERED_URL="https://${proxy_host}${proxy_path}"
+        TTYD_AGGREGATE_URL="https://${proxy_host}/${AGG_KEY}"
+    else
+        TTYD_REGISTERED_URL="http://${proxy_host}:${proxy_port}${proxy_path}"
+        TTYD_AGGREGATE_URL="http://${proxy_host}:${proxy_port}/${AGG_KEY}"
+    fi
     return 0
 }
 
@@ -777,16 +931,24 @@ except: print('ttyd')
             cp "$SOURCE_DIR/config/tmux.conf"    "$CC_HOME/config/tmux.conf"    2>/dev/null && ok "  tmux.conf"
             cp "$SOURCE_DIR/config/vimrc"        "$CC_HOME/config/vimrc"        2>/dev/null && ok "  vimrc"
             cp "$SOURCE_DIR/config/remote/index.html" "$CC_HOME/config/remote/index.html" 2>/dev/null && ok "  remote/index.html"
-            mkdir -p "$CC_HOME/config/tmate" 2>/dev/null
-            cp "$SOURCE_DIR/config/tmate/index.html" "$CC_HOME/config/tmate/index.html" 2>/dev/null && ok "  tmate/index.html"
-            cp "$SOURCE_DIR/config/tmate/tmate.conf" "$CC_HOME/config/tmate/tmate.conf" 2>/dev/null && ok "  tmate/tmate.conf"
+            mkdir -p "$CC_HOME/config/ttyd" 2>/dev/null
+            cp "$SOURCE_DIR/config/ttyd/index.html" "$CC_HOME/config/ttyd/index.html" 2>/dev/null && ok "  ttyd/index.html"
+            cp "$SOURCE_DIR/config/ttyd/ttyd.conf" "$CC_HOME/config/ttyd/ttyd.conf" 2>/dev/null && ok "  ttyd/ttyd.conf"
             cp "$SOURCE_DIR/bin/_cc-term-core"     "$CC_HOME/bin/_cc-term-core"     2>/dev/null
             cp "$SOURCE_DIR/bin/cc-term"         "$CC_HOME/bin/cc-term"         2>/dev/null
             cp "$SOURCE_DIR/bin/cc-remote-server.py"  "$CC_HOME/bin/cc-remote-server.py"  2>/dev/null
             cp "$SOURCE_DIR/bin/cc-relay-server.py"   "$CC_HOME/bin/cc-relay-server.py"   2>/dev/null
             cp "$SOURCE_DIR/bin/cc-proxy-server.py"    "$CC_HOME/bin/cc-proxy-server.py"   2>/dev/null
+            cp "$SOURCE_DIR/bin/cc-tunnel-client.py"   "$CC_HOME/bin/cc-tunnel-client.py"  2>/dev/null
             cp "$SOURCE_DIR/bin/cc-state-manager.py"  "$CC_HOME/bin/cc-state-manager.py"  2>/dev/null
             cp "$SOURCE_DIR/bin/cc-provider-manager.py" "$CC_HOME/bin/cc-provider-manager.py" 2>/dev/null
+            [[ -f "$SOURCE_DIR/bin/cc-remote-status.sh" ]] && cp "$SOURCE_DIR/bin/cc-remote-status.sh" "$CC_HOME/bin/cc-remote-status.sh" 2>/dev/null && chmod +x "$CC_HOME/bin/cc-remote-status.sh"
+            # Update homepage files
+            if [[ -d "$SOURCE_DIR/config/homepage" ]]; then
+                mkdir -p "$CC_HOME/config/homepage"
+                cp "$SOURCE_DIR/config/homepage/index.html" "$CC_HOME/config/homepage/index.html" 2>/dev/null
+                cp "$SOURCE_DIR/config/homepage/docs.html" "$CC_HOME/config/homepage/docs.html" 2>/dev/null
+            fi
             # Update provider scripts
             for script in "$SOURCE_DIR"/providers/*.sh; do
                 [[ -f "$script" ]] && cp "$script" "$CC_HOME/providers/" 2>/dev/null
@@ -930,10 +1092,14 @@ except Exception:
         TOKEN_ARGS=""
         [[ -n "$SERVER_TOKEN" ]] && TOKEN_ARGS="--token $SERVER_TOKEN"
 
+        HOMEPAGE_ARGS=""
+        [[ -d "$CC_HOME/config/homepage" ]] && HOMEPAGE_ARGS="--homepage-dir $CC_HOME/config/homepage"
+
         "$CC_PYTHON" "$PROXY_SERVER" \
             --port "$SERVER_PORT" \
-            --html "$CC_HOME/config/tmate/index.html" \
-            $TOKEN_ARGS &
+            --html "$CC_HOME/config/ttyd/index.html" \
+            --data-dir "$REMOTE_PID_DIR" \
+            $TOKEN_ARGS $HOMEPAGE_ARGS &
         PROXY_PID=$!
         echo "$PROXY_PID" > "$REMOTE_PID_DIR/proxy.pid"
 
@@ -965,96 +1131,218 @@ except Exception:
         fi
         ;;
 
-    # ---- Remote access ----
-    -r)
+    # ---- List remote sessions ----
+    -ls)
         require_config
-        shift
-        SESSIONS="${1:-}"
-
         LOCAL_IP=$(get_local_ip)
         PROXY_PORT=9999
-        REGISTERED_COUNT=0
 
-        while IFS= read -r session_name; do
-            [[ -z "$session_name" ]] && continue
-            if register_ttyd_session "$session_name" "$PROXY_PORT" "$LOCAL_IP"; then
-                REGISTERED_COUNT=$((REGISTERED_COUNT + 1))
-                echo ""
-                echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${session_name}${NC}"
-                echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
-            else
-                warn "Could not register session '$session_name' (is 'cc-term -server' running?)"
+        echo ""
+        echo -e "${BOLD}Active Remote Sessions:${NC}"
+        echo ""
+
+        ACTIVE_COUNT=0
+        LAST_AGG_KEY=""
+        for meta_file in "$REMOTE_PID_DIR"/ttyd-*.json; do
+            [[ -f "$meta_file" ]] || continue
+
+            session_info=$(META_FILE="$meta_file" "$CC_PYTHON" -c "
+import json, os
+try:
+    with open(os.environ['META_FILE']) as f:
+        data = json.load(f)
+        print(f\"{data.get('session_name', '')}|{data.get('proxy_path', '')}|{data.get('pid', '')}|{data.get('agg_key', '')}\")
+except Exception:
+    print('')
+")
+            [[ -z "$session_info" ]] && continue
+
+            IFS='|' read -r sname spath spid saggkey <<< "$session_info"
+            if kill -0 "$spid" 2>/dev/null; then
+                echo -e "  ${GREEN}●${NC} ${BOLD}${sname}${NC}"
+                echo -e "    ${DIM}http://${LOCAL_IP}:${PROXY_PORT}${spath}${NC}"
+                ACTIVE_COUNT=$((ACTIVE_COUNT + 1))
+                [[ -n "$saggkey" ]] && LAST_AGG_KEY="$saggkey"
             fi
-        done < <(list_target_sessions "$SESSIONS")
+        done
 
-        if [[ "$REGISTERED_COUNT" -eq 0 ]]; then
-            err "No sessions were registered."
-            exit 1
+        if [[ "$ACTIVE_COUNT" -eq 0 ]]; then
+            echo -e "  ${DIM}No active remote sessions${NC}"
+        elif [[ -n "$LAST_AGG_KEY" ]]; then
+            AGGREGATE_URL="http://${LOCAL_IP}:${PROXY_PORT}/${LAST_AGG_KEY}"
+            echo ""
+            echo -e "${BOLD}Aggregate Page:${NC}"
+            echo -e "  ${CYAN}${AGGREGATE_URL}${NC}"
+            echo ""
+            show_qr "$AGGREGATE_URL"
         fi
-
-        echo ""
-        echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
-        echo ""
-        if [[ "$REGISTERED_COUNT" -eq 1 ]]; then
-            show_qr "$TTYD_REGISTERED_URL"
-        else
-            show_qr "$TTYD_AGGREGATE_URL"
-        fi
-        echo -e "  Open the URL on your device."
-        echo -e "  Stop with: ${BOLD}cc-term -server -stop${NC}"
         echo ""
         ;;
 
-    # ---- Open with name or default (with optional -r/-q/-s flags) ----
-    *)
+    # ---- Open session / Remote access (flags can appear in any order) ----
+    -r|*)
         require_config
-        SESSION_NAME="${1:-main}"
 
-        if [[ ! -d "/Applications/iTerm.app" ]]; then
-            err "iTerm2 not found. Please run install.sh first."
-            exit 1
-        fi
-
-        # Parse remaining flags
-        shift 2>/dev/null || true
+        # Parse all arguments — flags and session name can be in any order
+        SESSION_NAME=""
         OPT_REMOTE=0
         OPT_QUIET=0
         OPT_PRIVATE=0
+        OPT_LOCAL=0
+        OPT_USERNAME=""
+        OPT_PASSWORD=""
         while [[ $# -gt 0 ]]; do
             case "$1" in
-                -r) OPT_REMOTE=1 ;;
-                -q) OPT_QUIET=1 ;;
-                -s) OPT_PRIVATE=1 ;;
-                *)  warn "Unknown flag: $1" ;;
+                -r)      OPT_REMOTE=1 ;;
+                -q)      OPT_QUIET=1 ;;
+                -s)      OPT_PRIVATE=1 ;;
+                --local) OPT_LOCAL=1 ;;
+                -u)      shift; OPT_USERNAME="${1:-}" ;;
+                -p)      shift; OPT_PASSWORD="${1:-}" ;;
+                -*)      warn "Unknown flag: $1" ;;
+                *)       [[ -z "$SESSION_NAME" ]] && SESSION_NAME="$1" ;;
             esac
             shift
         done
 
-        open_iterm_tab "$SESSION_NAME"
-
-        if [[ "$OPT_REMOTE" -eq 1 ]]; then
-            echo ""
-            info "Registering session on proxy page: $SESSION_NAME"
-
-            PROXY_PORT=9999
-            LOCAL_IP=$(get_local_ip)
-
-            if [[ "$OPT_PRIVATE" -eq 1 ]]; then
-                add_private_session "$SESSION_NAME"
-                info "Session '$SESSION_NAME' marked as private (hidden from global page)"
+        # ---- In-session remote: cc-term -r inside a tmux window ----
+        if [[ "$OPT_REMOTE" -eq 1 && -n "${TMUX:-}" && -z "$SESSION_NAME" ]]; then
+            ER_SESSION=$(tmux -L cc-term display-message -p '#{session_name}' 2>/dev/null || true)
+            if [[ -z "$ER_SESSION" ]]; then
+                err "Could not determine current tmux session name."
+                exit 1
             fi
 
-            if register_ttyd_session "$SESSION_NAME" "$PROXY_PORT" "$LOCAL_IP"; then
+            if [[ "$OPT_LOCAL" -eq 1 ]]; then
+                ER_HOST="127.0.0.1"
+                ER_PORT=9999
+            else
+                ER_HOST="$DEFAULT_PROXY_HOST"
+                ER_PORT="$DEFAULT_PROXY_PORT"
+            fi
+
+            # Check if already registered
+            ER_META=$(ttyd_meta_path "$ER_SESSION")
+            if [[ -f "$ER_META" ]]; then
+                ER_INFO=$(META_FILE="$ER_META" "$CC_PYTHON" -c "
+import json, os
+try:
+    with open(os.environ['META_FILE']) as f:
+        data = json.load(f)
+    print('%s|%s|%s' % (data.get('proxy_path', ''), data.get('pid', ''), data.get('agg_key', '')))
+except Exception:
+    print('||')
+" 2>/dev/null)
+                ER_PATH=${ER_INFO%%|*}
+                ER_REST=${ER_INFO#*|}
+                ER_PID=${ER_REST%%|*}
+                ER_AGGKEY=${ER_REST#*|}
+
+                if [[ -n "$ER_PID" ]] && kill -0 "$ER_PID" 2>/dev/null; then
+                    if [[ "$ER_PORT" == "443" ]]; then
+                        ER_URL="https://${ER_HOST}${ER_PATH}"
+                        ER_AGG_URL="https://${ER_HOST}/${ER_AGGKEY}"
+                    else
+                        ER_URL="http://${ER_HOST}:${ER_PORT}${ER_PATH}"
+                        ER_AGG_URL="http://${ER_HOST}:${ER_PORT}/${ER_AGGKEY}"
+                    fi
+                    echo ""
+                    echo -e "  ${GREEN}${BOLD}Already registered:${NC} ${BOLD}${ER_SESSION}${NC}"
+                    echo -e "  ${BOLD}URL:${NC}       ${CYAN}${ER_URL}${NC}"
+                    echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${ER_AGG_URL}${NC}"
+                    echo ""
+                    # Refresh tmux status bar
+                    tmux -L cc-term refresh-client -S 2>/dev/null || true
+                    exit 0
+                fi
+            fi
+
+            echo ""
+            info "Registering: $ER_SESSION"
+            if register_ttyd_session "$ER_SESSION" "$ER_HOST" "$ER_PORT" "$OPT_USERNAME" "$OPT_PASSWORD"; then
                 echo ""
-                echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
-                echo -e "  ${BOLD}Page:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
+                echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${ER_SESSION}${NC}"
+                echo -e "  ${BOLD}URL:${NC}       ${CYAN}${TTYD_REGISTERED_URL}${NC}"
+                echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
                 echo ""
                 if [[ "$OPT_QUIET" -ne 1 ]]; then
                     show_qr "$TTYD_REGISTERED_URL"
                 fi
+                # Refresh tmux status bar to show R indicator
+                tmux -L cc-term refresh-client -S 2>/dev/null || true
             else
-                warn "Could not register with proxy (is 'cc-term -server' running?)"
+                err "Failed to register session '$ER_SESSION'"
+                exit 1
             fi
+            exit 0
+        fi
+
+        # Default session name when not doing remote-all
+        if [[ -z "$SESSION_NAME" ]]; then
+            if [[ "$OPT_REMOTE" -eq 1 ]]; then
+                SESSION_NAME=""  # empty = register all non-private sessions
+            else
+                SESSION_NAME="main"
+            fi
+        fi
+
+        # Open iTerm tab for single (non-comma) session names
+        if [[ -n "$SESSION_NAME" && "$SESSION_NAME" != *","* ]]; then
+            if [[ ! -d "/Applications/iTerm.app" ]]; then
+                err "iTerm2 not found. Please run install.sh first."
+                exit 1
+            fi
+            open_iterm_tab "$SESSION_NAME"
+        fi
+
+        # Remote registration
+        if [[ "$OPT_REMOTE" -eq 1 ]]; then
+            echo ""
+            if [[ "$OPT_LOCAL" -eq 1 ]]; then
+                PROXY_HOST="127.0.0.1"
+                PROXY_PORT=9999
+            else
+                PROXY_HOST="$DEFAULT_PROXY_HOST"
+                PROXY_PORT="$DEFAULT_PROXY_PORT"
+            fi
+
+            if [[ "$OPT_PRIVATE" -eq 1 && -n "$SESSION_NAME" ]]; then
+                add_private_session "$SESSION_NAME"
+                info "Session '$SESSION_NAME' marked as private (hidden from global page)"
+            fi
+
+            REGISTERED_COUNT=0
+            while IFS= read -r session_name; do
+                [[ -z "$session_name" ]] && continue
+                info "Registering: $session_name"
+                if register_ttyd_session "$session_name" "$PROXY_HOST" "$PROXY_PORT" "$OPT_USERNAME" "$OPT_PASSWORD"; then
+                    REGISTERED_COUNT=$((REGISTERED_COUNT + 1))
+                    echo ""
+                    echo -e "  ${GREEN}${BOLD}Registered:${NC} ${BOLD}${session_name}${NC}"
+                    echo -e "  ${BOLD}URL:${NC}  ${CYAN}${TTYD_REGISTERED_URL}${NC}"
+                else
+                    warn "Could not register session '$session_name'"
+                fi
+            done < <(list_target_sessions "$SESSION_NAME")
+
+            if [[ "$REGISTERED_COUNT" -eq 0 ]]; then
+                err "No sessions were registered."
+                exit 1
+            fi
+
+            echo ""
+            echo -e "  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}"
+            echo ""
+            if [[ "$OPT_QUIET" -ne 1 ]]; then
+                if [[ "$REGISTERED_COUNT" -eq 1 ]]; then
+                    show_qr "$TTYD_REGISTERED_URL"
+                else
+                    show_qr "$TTYD_AGGREGATE_URL"
+                fi
+            fi
+            echo -e "  Open the URL on your device."
+            echo -e "  Stop with: ${BOLD}cc-term -server -stop${NC}"
+            echo ""
         fi
         ;;
 esac

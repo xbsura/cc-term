@@ -187,10 +187,19 @@ cp "$SCRIPT_DIR/config/vimrc"        "$CC_HOME/config/vimrc"
 mkdir -p "$CC_HOME/config/remote"
 cp "$SCRIPT_DIR/config/remote/index.html" "$CC_HOME/config/remote/index.html"
 
-# Deploy tmate access files
-mkdir -p "$CC_HOME/config/tmate"
-cp "$SCRIPT_DIR/config/tmate/index.html" "$CC_HOME/config/tmate/index.html"
-cp "$SCRIPT_DIR/config/tmate/tmate.conf" "$CC_HOME/config/tmate/tmate.conf"
+# Deploy ttyd access files
+mkdir -p "$CC_HOME/config/ttyd"
+cp "$SCRIPT_DIR/config/ttyd/index.html" "$CC_HOME/config/ttyd/index.html"
+cp "$SCRIPT_DIR/config/ttyd/ttyd.conf" "$CC_HOME/config/ttyd/ttyd.conf"
+
+# Deploy homepage files
+mkdir -p "$CC_HOME/config/homepage"
+if [[ -f "$SCRIPT_DIR/config/homepage/index.html" ]]; then
+    cp "$SCRIPT_DIR/config/homepage/index.html" "$CC_HOME/config/homepage/index.html"
+fi
+if [[ -f "$SCRIPT_DIR/config/homepage/docs.html" ]]; then
+    cp "$SCRIPT_DIR/config/homepage/docs.html" "$CC_HOME/config/homepage/docs.html"
+fi
 
 # Copy launchers and servers
 cp "$SCRIPT_DIR/bin/_cc-term-core" "$CC_HOME/bin/_cc-term-core"
@@ -198,10 +207,17 @@ cp "$SCRIPT_DIR/bin/cc-term" "$CC_HOME/bin/cc-term"
 cp "$SCRIPT_DIR/bin/cc-remote-server.py" "$CC_HOME/bin/cc-remote-server.py"
 cp "$SCRIPT_DIR/bin/cc-relay-server.py" "$CC_HOME/bin/cc-relay-server.py"
 cp "$SCRIPT_DIR/bin/cc-proxy-server.py" "$CC_HOME/bin/cc-proxy-server.py"
+cp "$SCRIPT_DIR/bin/cc-tunnel-client.py" "$CC_HOME/bin/cc-tunnel-client.py"
 cp "$SCRIPT_DIR/bin/cc-tmate-manager.py" "$CC_HOME/bin/cc-tmate-manager.py"
 cp "$SCRIPT_DIR/bin/cc-state-manager.py" "$CC_HOME/bin/cc-state-manager.py"
 cp "$SCRIPT_DIR/bin/cc-provider-manager.py" "$CC_HOME/bin/cc-provider-manager.py"
 chmod +x "$CC_HOME/bin/_cc-term-core" "$CC_HOME/bin/cc-term"
+
+# Deploy cc-remote-status.sh
+if [[ -f "$SCRIPT_DIR/bin/cc-remote-status.sh" ]]; then
+    cp "$SCRIPT_DIR/bin/cc-remote-status.sh" "$CC_HOME/bin/cc-remote-status.sh"
+    chmod +x "$CC_HOME/bin/cc-remote-status.sh"
+fi
 
 # Deploy provider scripts
 mkdir -p "$CC_HOME/providers"

@@ -12,7 +12,6 @@ syntax on
 set background=dark
 colorscheme desert
 set number
-set relativenumber
 set cursorline
 set showmatch
 set signcolumn=no
@@ -42,6 +41,11 @@ set hidden
 set clipboard=unnamed
 set mouse=a
 set ttimeoutlen=50
+
+" --- tmux mouse fix ---
+if &term =~ '^screen' || &term =~ '^tmux'
+    set ttymouse=sgr
+endif
 
 " --- Performance ---
 set lazyredraw

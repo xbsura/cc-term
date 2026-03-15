@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Docs — cc-term</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--bg2:#12121a;--fg:#c8d0e0;--accent:#6af;--green:#57d37c;
+  --red:#ff5f5f;--yellow:#ffd75f;--border:#222;--pixel:'Press Start 2P',monospace;
+  --mono:'JetBrains Mono','Menlo',monospace;
+}
+html{background:var(--bg);color:var(--fg);font-family:var(--mono);scroll-behavior:smooth}
+body{overflow-x:hidden}
+body::before{
+  content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+}
+
+/* ---- Nav ---- */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;height:52px;
+  background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo{font-family:var(--pixel);font-size:11px;color:var(--accent);letter-spacing:1px;text-decoration:none}
+.nav-links{display:flex;gap:20px}
+.nav-links a{color:var(--fg);text-decoration:none;font-size:13px;opacity:0.7;transition:opacity .2s}
+.nav-links a:hover{opacity:1;color:var(--accent)}
+
+/* ---- Layout ---- */
+.docs-wrap{display:flex;max-width:1100px;margin:0 auto;padding:72px 24px 60px;gap:40px}
+.sidebar{
+  width:200px;flex-shrink:0;position:sticky;top:72px;align-self:flex-start;
+  max-height:calc(100vh - 90px);overflow-y:auto;
+}
+.sidebar a{
+  display:block;padding:6px 0;font-size:12px;color:#888;text-decoration:none;
+  border-left:2px solid transparent;padding-left:12px;transition:all .15s;
+}
+.sidebar a:hover,.sidebar a.active{color:var(--accent);border-color:var(--accent)}
+.sidebar .group{
+  font-family:var(--pixel);font-size:8px;color:var(--accent);letter-spacing:1px;
+  text-transform:uppercase;margin-top:20px;margin-bottom:8px;padding-left:12px;
+}
+.sidebar .group:first-child{margin-top:0}
+.content{flex:1;min-width:0}
+
+/* ---- Typography ---- */
+.content h1{
+  font-family:var(--pixel);font-size:18px;color:#fff;margin-bottom:8px;line-height:1.5;
+}
+.content h2{
+  font-family:var(--pixel);font-size:12px;color:var(--accent);
+  margin-top:48px;margin-bottom:16px;padding-bottom:8px;
+  border-bottom:1px solid var(--border);letter-spacing:1px;
+}
+.content h3{font-size:14px;color:#fff;margin-top:28px;margin-bottom:10px}
+.content p{font-size:13px;line-height:1.8;margin-bottom:14px;color:#aaa}
+.content ul,.content ol{margin:0 0 14px 20px}
+.content li{font-size:13px;line-height:1.8;color:#aaa;margin-bottom:4px}
+.content code{
+  background:var(--bg2);padding:2px 7px;border-radius:3px;font-size:12px;
+  color:var(--green);border:1px solid var(--border);
+}
+.content pre{
+  background:var(--bg2);border:1px solid var(--border);border-radius:6px;
+  padding:16px 18px;margin-bottom:18px;overflow-x:auto;
+  font-size:12px;line-height:1.7;color:var(--fg);
+}
+.content pre code{background:none;border:none;padding:0;color:inherit}
+.content .note{
+  background:rgba(106,170,255,0.06);border-left:3px solid var(--accent);
+  padding:12px 16px;margin-bottom:18px;border-radius:0 6px 6px 0;
+  font-size:12px;color:#aaa;
+}
+.content .warn{
+  background:rgba(255,215,95,0.06);border-left:3px solid var(--yellow);
+  padding:12px 16px;margin-bottom:18px;border-radius:0 6px 6px 0;
+  font-size:12px;color:#aaa;
+}
+table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12px}
+th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);color:var(--accent);font-size:11px;letter-spacing:0.5px}
+td{padding:8px 12px;border-bottom:1px solid var(--border);color:#aaa}
+td code{font-size:11px}
+
+/* ---- Footer ---- */
+footer{
+  text-align:center;padding:32px 24px;border-top:1px solid var(--border);
+  font-size:11px;color:#555;
+}
+footer a{color:var(--accent);text-decoration:none}
+
+/* ---- Mobile ---- */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .docs-wrap{padding:68px 16px 40px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">&gt; cc-term</a>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/docs">Docs</a>
+    <a href="https://github.com/nicexe/cc-terminal" target="_blank">GitHub</a>
+  </div>
+</nav>
+
+<div class="docs-wrap">
+  <aside class="sidebar">
+    <div class="group">Getting Started</div>
+    <a href="#install">Installation</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#requirements">Requirements</a>
+    <div class="group">Usage</div>
+    <a href="#sessions">Sessions</a>
+    <a href="#remote">Remote Access</a>
+    <a href="#keyboard">Keyboard Shortcuts</a>
+    <a href="#windows">Windows & Panes</a>
+    <a href="#providers">AI Providers</a>
+    <div class="group">Server</div>
+    <a href="#self-host">Self-Hosting</a>
+    <a href="#server-cli">Server CLI</a>
+    <div class="group">Reference</div>
+    <a href="#cli-ref">CLI Reference</a>
+    <a href="#files">File Structure</a>
+    <a href="#uninstall">Uninstall</a>
+  </aside>
+
+  <main class="content">
+    <h1>Documentation</h1>
+    <p>Everything you need to install, configure, and use cc-term.</p>
+
+    <!-- ======== Getting Started ======== -->
+    <h2 id="install">Installation</h2>
+    <p>cc-term runs on macOS (Intel and Apple Silicon). The installer handles all dependencies via Homebrew.</p>
+    <pre><code>curl -fsSL https://ttyd.ink/install | bash</code></pre>
+    <p>Or clone and run manually:</p>
+    <pre><code>git clone https://github.com/nicexe/cc-terminal.git
+cd cc-terminal
+./install.sh</code></pre>
+    <div class="note">The installer is idempotent. Run it again anytime to update cc-term without losing your sessions or configuration.</div>
+
+    <h3>What gets installed</h3>
+    <ul>
+      <li>Homebrew packages: <code>bash</code>, <code>tmux</code>, <code>vim</code>, <code>bat</code>, <code>btop</code>, <code>duf</code>, <code>tig</code>, <code>lazygit</code>, <code>qrencode</code>, <code>python@3</code></li>
+      <li>iTerm2 (via Homebrew Cask)</li>
+      <li>Tmux Plugin Manager (TPM) with tmux-resurrect and tmux-continuum</li>
+      <li>Everything installs under <code>~/.cc-term</code> &mdash; your existing shell/tmux/vim configs are untouched.</li>
+    </ul>
+
+    <h2 id="quickstart">Quick Start</h2>
+    <pre><code># Launch default session
+cc-term
+
+# Launch a named session
+cc-term myproject
+
+# Enable remote access (inside a session window)
+cc-term -r
+
+# List all sessions
+cc-term -ls</code></pre>
+
+    <h2 id="requirements">Requirements</h2>
+    <table>
+      <tr><th>Requirement</th><th>Details</th></tr>
+      <tr><td>OS</td><td>macOS 12+ (Monterey or later)</td></tr>
+      <tr><td>Arch</td><td>Intel (x86_64) or Apple Silicon (arm64)</td></tr>
+      <tr><td>Homebrew</td><td>Auto-installed if missing</td></tr>
+      <tr><td>Browser (remote)</td><td>Any modern browser &mdash; Chrome, Safari, Firefox, Edge</td></tr>
+    </table>
+
+    <!-- ======== Usage ======== -->
+    <h2 id="sessions">Sessions</h2>
+    <p>Sessions are persistent tmux sessions managed by cc-term. Each session opens in a new iTerm2 tab.</p>
+    <pre><code># Open default "main" session
+cc-term
+
+# Open named session
+cc-term myproject
+
+# Open multiple sessions at once
+cc-term api,frontend,worker
+
+# List sessions
+cc-term -ls
+
+# Delete a session
+cc-term -delete myproject</code></pre>
+    <div class="note">Sessions survive terminal crashes, disconnects, and reboots (via tmux-resurrect + tmux-continuum). They auto-save every 10 minutes.</div>
+
+    <h2 id="remote">Remote Access</h2>
+    <p>Share any session over the web. Access from your phone, tablet, or another computer.</p>
+
+    <h3>Enable remote for the current session</h3>
+    <p>Inside a cc-term tmux window, run:</p>
+    <pre><code>cc-term -r</code></pre>
+    <p>This registers the current session with the proxy server and gives you a URL + QR code.</p>
+
+    <h3>Enable remote from outside tmux</h3>
+    <pre><code># Register a specific session
+cc-term myproject -r
+
+# Register all sessions
+cc-term -r
+
+# Register with password protection
+cc-term myproject -r -u admin -p secret
+
+# Register as private (hidden from aggregate page)
+cc-term myproject -r -s</code></pre>
+
+    <h3>Status indicator</h3>
+    <p>When a session is registered for remote access, the tmux status bar shows a green <strong>R</strong> on the far right. If the tunnel connection drops, it turns red.</p>
+
+    <h3>Stop remote access</h3>
+    <pre><code>cc-term -server -stop</code></pre>
+
+    <h2 id="keyboard">Keyboard Shortcuts</h2>
+    <p>The tmux prefix key is <code>Ctrl+A</code> (not the default Ctrl+B).</p>
+    <table>
+      <tr><th>Shortcut</th><th>Action</th></tr>
+      <tr><td><code>F5</code></td><td>Split horizontally (top/bottom)</td></tr>
+      <tr><td><code>F6</code></td><td>Split vertically (left/right)</td></tr>
+      <tr><td><code>F11</code></td><td>Previous window</td></tr>
+      <tr><td><code>F12</code></td><td>Next window</td></tr>
+      <tr><td><code>Ctrl+A &rarr; arrow</code></td><td>Switch between panes</td></tr>
+      <tr><td><code>Option+arrow</code></td><td>Resize pane</td></tr>
+      <tr><td><code>Ctrl+A &rarr; r</code></td><td>Reload tmux config</td></tr>
+    </table>
+
+    <h3>Web UI shortcuts</h3>
+    <table>
+      <tr><th>Shortcut</th><th>Action</th></tr>
+      <tr><td><code>&#8984;&#8593; / &#8984;&#8595;</code></td><td>Switch sessions</td></tr>
+      <tr><td>Click pane in sidebar</td><td>Switch active pane</td></tr>
+      <tr><td>Click window tab</td><td>Switch window</td></tr>
+    </table>
+
+    <h2 id="windows">Windows &amp; Panes</h2>
+    <p>Each session can have multiple windows (tabs in the tmux status bar) and each window can have multiple panes (splits).</p>
+    <pre><code># Inside tmux (after Ctrl+A prefix):
+# c     - create new window
+# n     - next window
+# p     - previous window
+# ,     - rename window
+# &     - kill window
+
+# Splitting:
+# F5    - horizontal split
+# F6    - vertical split</code></pre>
+
+    <h2 id="providers">AI Providers</h2>
+    <p>cc-term can manage AI provider API keys for Claude Code and other tools.</p>
+    <pre><code># List providers
+cc-term -p -ls
+
+# Add a new provider
+cc-term -p -new -api https://api.example.com -key sk-xxx
+
+# Edit a provider
+cc-term -p -edit &lt;id&gt; -key sk-newkey
+
+# Delete a provider
+cc-term -p -delete &lt;id&gt;</code></pre>
+
+    <!-- ======== Server ======== -->
+    <h2 id="self-host">Self-Hosting</h2>
+    <p>By default, cc-term tunnels through <code>ttyd.ink</code>. You can run your own proxy server instead.</p>
+    <pre><code># Start local proxy server
+cc-term -server --port 9999
+
+# Register sessions against your local server
+cc-term -r --local
+
+# Or specify a custom host via environment variables
+export CC_PROXY_HOST=my-server.example.com
+export CC_PROXY_PORT=443
+export CC_PROXY_PROTOCOL=https
+cc-term -r</code></pre>
+    <div class="warn">Self-hosted mode requires a publicly accessible server if you want to access sessions from outside your network. See the deploy guide on GitHub for nginx and systemd configuration.</div>
+
+    <h2 id="server-cli">Server CLI</h2>
+    <table>
+      <tr><th>Command</th><th>Description</th></tr>
+      <tr><td><code>cc-term -server</code></td><td>Start the proxy server (foreground)</td></tr>
+      <tr><td><code>cc-term -server -b</code></td><td>Start in background</td></tr>
+      <tr><td><code>cc-term -server --port 8080</code></td><td>Custom port</td></tr>
+      <tr><td><code>cc-term -server --token mysecret</code></td><td>Require token for registration API</td></tr>
+      <tr><td><code>cc-term -server -stop</code></td><td>Stop all server processes</td></tr>
+    </table>
+
+    <!-- ======== Reference ======== -->
+    <h2 id="cli-ref">CLI Reference</h2>
+    <table>
+      <tr><th>Command</th><th>Description</th></tr>
+      <tr><td><code>cc-term</code></td><td>Open default "main" session</td></tr>
+      <tr><td><code>cc-term &lt;name&gt;</code></td><td>Open or create named session</td></tr>
+      <tr><td><code>cc-term -new &lt;name&gt;</code></td><td>Force create new session</td></tr>
+      <tr><td><code>cc-term -ls</code></td><td>List all tmux sessions</td></tr>
+      <tr><td><code>cc-term -delete &lt;name&gt;</code></td><td>Delete a session</td></tr>
+      <tr><td><code>cc-term -r</code></td><td>Enable remote (in-session: current; outside: all)</td></tr>
+      <tr><td><code>cc-term &lt;name&gt; -r</code></td><td>Open session + enable remote</td></tr>
+      <tr><td><code>cc-term -r -q</code></td><td>Remote without QR code</td></tr>
+      <tr><td><code>cc-term -r -s</code></td><td>Register as private session</td></tr>
+      <tr><td><code>cc-term -r -u user -p pass</code></td><td>Remote with auth</td></tr>
+      <tr><td><code>cc-term -server</code></td><td>Start proxy server</td></tr>
+      <tr><td><code>cc-term -server -stop</code></td><td>Stop proxy server</td></tr>
+      <tr><td><code>cc-term -p -ls</code></td><td>List AI providers</td></tr>
+      <tr><td><code>cc-term -h</code></td><td>Show help</td></tr>
+      <tr><td><code>cc-term -hh</code></td><td>Show detailed help</td></tr>
+    </table>
+
+    <h2 id="files">File Structure</h2>
+    <pre><code>~/.cc-term/
+├── bin/                  # Executables
+│   ├── cc-term           # Main CLI
+│   ├── _cc-term-core     # Core logic
+│   ├── cc-proxy-server.py
+│   ├── cc-tunnel-client.py
+│   └── ...
+├── config/
+│   ├── bash_profile      # Isolated bash config
+│   ├── tmux.conf          # Tmux config
+│   ├── vimrc              # Vim config
+│   ├── remote/            # Remote server HTML
+│   └── ttyd/              # Web terminal UI
+├── providers/             # Provider scripts
+├── providers.json         # AI provider config
+├── run/                   # PID files, runtime state
+├── state/                 # Session state
+├── tmux/plugins/          # TPM plugins
+└── venv/                  # Isolated Python venv</code></pre>
+
+    <h2 id="uninstall">Uninstall</h2>
+    <p>cc-term is fully self-contained. To remove it:</p>
+    <pre><code># Stop any running processes
+cc-term -server -stop
+
+# Remove the installation directory
+rm -rf ~/.cc-term
+
+# Remove the symlink
+rm -f $(brew --prefix)/bin/cc-term</code></pre>
+    <div class="note">This does not uninstall Homebrew packages (tmux, vim, etc.) that may be used by other tools. Remove those manually if desired.</div>
+
+  </main>
+</div>
+
+<footer>
+  <p>cc-term docs &mdash; <a href="/">Home</a> &middot; <a href="https://github.com/nicexe/cc-terminal">GitHub</a></p>
+</footer>
+
+</body>
+</html>
