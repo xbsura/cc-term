@@ -264,6 +264,46 @@ class ProxyServer:
         except FileNotFoundError:
             return "<html><body><h1>cc-term: index not found</h1></body></html>"
 
+    def _generate_install_script(self):
+        return """#!/bin/bash
+# cc-term installer — https://github.com/xbsura/cc-term
+set -e
+
+REPO="https://github.com/xbsura/cc-term.git"
+INSTALL_DIR="$HOME/.cc-term-src"
+
+echo ""
+echo "  cc-term installer"
+echo "  =================="
+echo ""
+
+# Check macOS
+if [[ "$(uname)" != "Darwin" ]]; then
+    echo "Error: cc-term requires macOS."
+    exit 1
+fi
+
+# Clone or update
+if [[ -d "$INSTALL_DIR" ]]; then
+    echo "[cc-term] Updating existing installation..."
+    cd "$INSTALL_DIR"
+    git pull --ff-only origin main 2>/dev/null || git pull origin main
+else
+    echo "[cc-term] Cloning cc-term..."
+    git clone "$REPO" "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
+fi
+
+echo "[cc-term] Running install.sh..."
+echo ""
+./install.sh
+
+echo ""
+echo "[cc-term] Installation complete!"
+echo "[cc-term] Open a new iTerm2 window and run: cc-term"
+echo ""
+"""
+
     def _load_agg_keys(self):
         global agg_keys
         path = os.path.join(self.data_dir, "agg_keys.json")
@@ -524,6 +564,13 @@ class ProxyServer:
 
         if path == "/docs" and method == "GET" and self.docs_html:
             writer.write(self.http_response("200 OK", "text/html; charset=utf-8", self.docs_html))
+            await writer.drain()
+            writer.close()
+            return
+
+        if path == "/install" and method == "GET":
+            install_script = self._generate_install_script()
+            writer.write(self.http_response("200 OK", "text/plain; charset=utf-8", install_script))
             await writer.drain()
             writer.close()
             return

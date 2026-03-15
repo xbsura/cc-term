@@ -654,6 +654,77 @@
             padding: 0 10px;
         }
 
+        .mobile-tabbar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 6;
+            display: none;
+            align-items: stretch;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            background: rgba(20, 20, 20, 0.94);
+            backdrop-filter: blur(8px);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0;
+            gap: 0;
+        }
+
+        .mobile-tabbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .mobile-tabbar.hidden {
+            display: none !important;
+        }
+
+        .mobile-tab {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            padding: 8px 6px 10px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            border-top: 2px solid transparent;
+            transition: color 0.12s, border-color 0.12s;
+        }
+
+        .mobile-tab:active {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .mobile-tab.active {
+            color: var(--accent);
+            border-top-color: var(--accent);
+        }
+
+        .mobile-tab .tab-icon {
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .mobile-tab .tab-label {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .hidden {
             display: none;
         }
@@ -705,6 +776,10 @@
             }
 
             .mobile-header {
+                display: flex;
+            }
+
+            .mobile-tabbar:not(.hidden) {
                 display: flex;
             }
 
@@ -765,8 +840,8 @@
                             <span id="mobile-header-subtitle">Choose a session, then a pane</span>
                         </div>
                         <div class="mobile-actions">
-                            <button id="mobile-session-btn" class="mobile-action-btn" type="button">Sessions</button>
-                            <button id="mobile-pane-btn" class="mobile-action-btn" type="button">Panes</button>
+                            <button id="mobile-session-btn" class="mobile-action-btn" type="button" style="-webkit-tap-highlight-color:transparent;touch-action:manipulation">Sessions</button>
+                            <button id="mobile-pane-btn" class="mobile-action-btn" type="button" style="-webkit-tap-highlight-color:transparent;touch-action:manipulation">Panes</button>
                         </div>
                     </div>
 
@@ -795,6 +870,8 @@
                         </div>
                         <div id="mobile-sheet-body" class="mobile-sheet-body"></div>
                     </div>
+
+                    <div id="mobile-tabbar" class="mobile-tabbar hidden"></div>
                 </div>
             </main>
         </div>
@@ -843,6 +920,7 @@
             mobileSheetSubtitle: document.getElementById('mobile-sheet-subtitle'),
             mobileSheetBody: document.getElementById('mobile-sheet-body'),
             mobileBackButton: document.getElementById('mobile-back-btn'),
+            mobileTabbar: document.getElementById('mobile-tabbar'),
         };
 
         function safeGet(key) {
@@ -1180,6 +1258,7 @@
             if (state.mode !== 'mobile') {
                 showMobileSheet(false);
                 elements.mobileHeader.classList.add('hidden');
+                elements.mobileTabbar.classList.add('hidden');
                 return;
             }
 
@@ -1187,15 +1266,76 @@
 
             if (state.mobile.stage === 'viewer') {
                 showMobileSheet(false);
+                renderMobileTabbar();
                 return;
             }
 
+            elements.mobileTabbar.classList.add('hidden');
             showMobileSheet(true);
             if (state.mobile.stage === 'panes') {
                 renderMobilePanes();
             } else {
                 renderMobileSessions();
             }
+        }
+
+        function renderMobileTabbar() {
+            if (state.mode !== 'mobile' || state.mobile.stage !== 'viewer') {
+                elements.mobileTabbar.classList.add('hidden');
+                return;
+            }
+
+            const groups = groupedPanes(state.mobile.panes);
+            if (groups.length <= 1) {
+                elements.mobileTabbar.classList.add('hidden');
+                return;
+            }
+
+            const activeWin = state.activePane ? String(state.activePane.window_index) : '';
+
+            elements.mobileTabbar.classList.remove('hidden');
+            elements.mobileTabbar.innerHTML = groups.map((group) => {
+                const isActive = activeWin === String(group.window_index);
+                const label = group.window_name || `win ${group.window_index}`;
+                return `<button class="mobile-tab${isActive ? ' active' : ''}" type="button" data-tab-window="${escapeHtml(group.window_index)}">
+                    <span class="tab-icon">${isActive ? '&#9632;' : '&#9633;'}</span>
+                    <span class="tab-label">${escapeHtml(label)}</span>
+                </button>`;
+            }).join('');
+
+            elements.mobileTabbar.querySelectorAll('[data-tab-window]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const winIdx = btn.getAttribute('data-tab-window');
+                    switchMobileWindow(winIdx);
+                });
+            });
+        }
+
+        async function switchMobileWindow(windowIndex) {
+            const sessionName = state.mobile.selectedSession;
+            const item = findSession(sessionName);
+            if (!item) return;
+
+            const windowPanes = state.mobile.panes.filter(
+                (p) => String(p.window_index) === String(windowIndex)
+            );
+            if (!windowPanes.length) return;
+
+            // Select first pane in the window
+            const pane = windowPanes[0];
+            showLoading('Switching window...', '');
+            await postJson('/api/select-pane', {
+                session: sessionName,
+                window: String(windowIndex),
+                pane: String(pane.pane_index),
+                zoom: true,
+            }).catch(() => ({}));
+
+            state.activePane = pane;
+            rememberMobilePane(sessionName, pane);
+            updateViewerCopy();
+            renderMobileTabbar();
+            await loadFrame(item, { forceReload: true });
         }
 
         function _replaceFrame() {

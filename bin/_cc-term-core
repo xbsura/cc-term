@@ -512,6 +512,81 @@ EOF
     fi
 }
 
+start_autosave() {
+    local pid_file="$REMOTE_PID_DIR/autosave.pid"
+    mkdir -p "$REMOTE_PID_DIR"
+
+    # Already running?
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "$pid_file"
+    fi
+
+    # Start background save loop (every 5 minutes)
+    (
+        while true; do
+            sleep 300
+            "$CC_PYTHON" "$STATE_MANAGER" save >/dev/null 2>&1 || true
+        done
+    ) &
+    echo $! > "$pid_file"
+    disown
+}
+
+check_autorecover() {
+    local state_file="$CC_HOME/state/snapshot.json"
+    [[ -f "$state_file" ]] || return 0
+
+    # Check if there are saved sessions not currently running
+    local needs_recover
+    needs_recover=$("$CC_PYTHON" -c "
+import json, subprocess, sys
+try:
+    with open('$state_file') as f:
+        state = json.load(f)
+    existing = set()
+    try:
+        r = subprocess.run(['tmux', '-L', 'cc-term', 'list-sessions', '-F', '#{session_name}'],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            existing = set(r.stdout.strip().split('\n'))
+    except Exception:
+        pass
+    saved = [s['name'] for s in state.get('sessions', [])]
+    missing = [s for s in saved if s not in existing]
+    if missing:
+        print(','.join(missing))
+except Exception:
+    pass
+" 2>/dev/null)
+
+    if [[ -n "$needs_recover" ]]; then
+        echo ""
+        info "Found saved sessions to recover: $needs_recover"
+        # Run recover and open iTerm2 tabs
+        output=$("$CC_PYTHON" "$STATE_MANAGER" recover)
+        echo "$output" | grep -v "^__RESTORED__:"
+
+        restored=$(echo "$output" | grep "^__RESTORED__:" | sed 's/^__RESTORED__://')
+        if [[ -n "$restored" ]]; then
+            echo ""
+            info "Opening recovered sessions in iTerm2..."
+            IFS=',' read -ra sessions <<< "$restored"
+            for sname in "${sessions[@]}"; do
+                open_iterm_tab "$sname"
+                ok "  Opened tab: $sname"
+                sleep 0.5
+            done
+            echo ""
+            ok "All sessions recovered."
+        fi
+    fi
+}
+
 # ==============================================================
 # PLUGIN CATALOG
 # ==============================================================
@@ -1188,7 +1263,6 @@ except Exception:
         OPT_REMOTE=0
         OPT_QUIET=0
         OPT_PRIVATE=0
-        OPT_LOCAL=0
         OPT_USERNAME=""
         OPT_PASSWORD=""
         while [[ $# -gt 0 ]]; do
@@ -1196,7 +1270,6 @@ except Exception:
                 -r)      OPT_REMOTE=1 ;;
                 -q)      OPT_QUIET=1 ;;
                 -s)      OPT_PRIVATE=1 ;;
-                --local) OPT_LOCAL=1 ;;
                 -u)      shift; OPT_USERNAME="${1:-}" ;;
                 -p)      shift; OPT_PASSWORD="${1:-}" ;;
                 -*)      warn "Unknown flag: $1" ;;
@@ -1213,13 +1286,8 @@ except Exception:
                 exit 1
             fi
 
-            if [[ "$OPT_LOCAL" -eq 1 ]]; then
-                ER_HOST="127.0.0.1"
-                ER_PORT=9999
-            else
-                ER_HOST="$DEFAULT_PROXY_HOST"
-                ER_PORT="$DEFAULT_PROXY_PORT"
-            fi
+            ER_HOST="$DEFAULT_PROXY_HOST"
+            ER_PORT="$DEFAULT_PROXY_PORT"
 
             # Check if already registered
             ER_META=$(ttyd_meta_path "$ER_SESSION")
@@ -1286,6 +1354,12 @@ except Exception:
             fi
         fi
 
+        # Auto-recover saved sessions on first open
+        if [[ "$OPT_REMOTE" -ne 1 ]]; then
+            check_autorecover
+            start_autosave
+        fi
+
         # Open iTerm tab for single (non-comma) session names
         if [[ -n "$SESSION_NAME" && "$SESSION_NAME" != *","* ]]; then
             if [[ ! -d "/Applications/iTerm.app" ]]; then
@@ -1298,13 +1372,8 @@ except Exception:
         # Remote registration
         if [[ "$OPT_REMOTE" -eq 1 ]]; then
             echo ""
-            if [[ "$OPT_LOCAL" -eq 1 ]]; then
-                PROXY_HOST="127.0.0.1"
-                PROXY_PORT=9999
-            else
-                PROXY_HOST="$DEFAULT_PROXY_HOST"
-                PROXY_PORT="$DEFAULT_PROXY_PORT"
-            fi
+            PROXY_HOST="$DEFAULT_PROXY_HOST"
+            PROXY_PORT="$DEFAULT_PROXY_PORT"
 
             if [[ "$OPT_PRIVATE" -eq 1 && -n "$SESSION_NAME" ]]; then
                 add_private_session "$SESSION_NAME"

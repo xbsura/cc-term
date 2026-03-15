@@ -3,344 +3,316 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>cc-term — AI Terminal for macOS</title>
+<title>cc-term — AI Terminal Toolkit for macOS</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0a0f;--bg2:#12121a;--fg:#c8d0e0;--accent:#6af;--green:#57d37c;
-  --red:#ff5f5f;--yellow:#ffd75f;--border:#222;--pixel: 'Press Start 2P', monospace;
-  --mono: 'JetBrains Mono', 'Menlo', monospace;
+  --bg:#0c0c0c;--bg2:#141414;--bg3:#1a1a1a;
+  --fg:#b0b0b0;--fg2:#888;--white:#e8e8e8;
+  --accent:#6af;--green:#57d37c;--cyan:#5de5d5;
+  --red:#ff5f5f;--yellow:#ffd75f;--dim:#444;
+  --border:#222;
+  --mono:'JetBrains Mono','SF Mono','Menlo','Consolas',monospace;
 }
-html{background:var(--bg);color:var(--fg);font-family:var(--mono);scroll-behavior:smooth}
+html{background:var(--bg);color:var(--fg);font-family:var(--mono);scroll-behavior:smooth;font-size:14px}
 body{overflow-x:hidden}
-
-/* ---- Scanline overlay ---- */
-body::before{
-  content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
-}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
 
 /* ---- Nav ---- */
 nav{
   position:fixed;top:0;left:0;right:0;z-index:100;
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;height:52px;
-  background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);
+  padding:0 24px;height:44px;
+  background:rgba(12,12,12,0.92);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);
+  font-size:13px;
 }
-.nav-logo{font-family:var(--pixel);font-size:11px;color:var(--accent);letter-spacing:1px}
-.nav-links{display:flex;gap:20px}
-.nav-links a{color:var(--fg);text-decoration:none;font-size:13px;opacity:0.7;transition:opacity .2s}
-.nav-links a:hover{opacity:1;color:var(--accent)}
+.nav-logo{color:var(--green);font-weight:700;letter-spacing:0.5px}
+.nav-logo span{color:var(--dim)}
+.nav-links{display:flex;gap:18px}
+.nav-links a{color:var(--fg2);transition:color .15s}
+.nav-links a:hover{color:var(--white);text-decoration:none}
 
 /* ---- Hero ---- */
 .hero{
   min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:80px 24px 60px;
-  background:radial-gradient(ellipse at 50% 30%,rgba(106,170,255,0.06) 0%,transparent 60%);
+  text-align:center;padding:80px 20px 60px;
+  background:radial-gradient(ellipse at 50% 20%,rgba(106,170,255,0.04) 0%,transparent 60%);
 }
-.hero-badge{
-  display:inline-block;font-family:var(--pixel);font-size:9px;color:var(--green);
-  border:1px solid var(--green);padding:4px 12px;margin-bottom:24px;letter-spacing:1px;
-  animation:blink-border 3s ease-in-out infinite;
+.hero-label{
+  font-size:11px;color:var(--green);letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:20px;font-weight:500;
 }
-@keyframes blink-border{0%,100%{border-color:var(--green)}50%{border-color:transparent}}
 .hero h1{
-  font-family:var(--pixel);font-size:clamp(18px,4vw,36px);color:#fff;
-  line-height:1.6;margin-bottom:16px;
+  font-size:clamp(20px,4vw,38px);color:var(--white);font-weight:700;
+  line-height:1.5;margin-bottom:14px;
 }
-.hero h1 .accent{color:var(--accent)}
-.hero-sub{font-size:15px;color:#888;max-width:520px;line-height:1.7;margin-bottom:40px}
-.hero-cmd{
-  background:var(--bg2);border:1px solid var(--border);border-radius:6px;
-  padding:14px 28px;font-size:14px;color:var(--green);font-family:var(--mono);
-  display:inline-flex;align-items:center;gap:10px;cursor:pointer;
-  transition:border-color .2s;position:relative;
-}
-.hero-cmd:hover{border-color:var(--accent)}
-.hero-cmd .prompt{color:#555}
-.hero-cmd .copy-hint{
-  position:absolute;top:-28px;left:50%;transform:translateX(-50%);
-  font-size:10px;color:var(--accent);opacity:0;transition:opacity .2s;
-  font-family:var(--mono);white-space:nowrap;
-}
-.hero-cmd:hover .copy-hint{opacity:1}
+.hero h1 .hl{color:var(--cyan)}
+.hero-sub{font-size:14px;color:var(--fg2);max-width:540px;line-height:1.8;margin-bottom:36px}
 
-/* ---- Pixel art terminal mock ---- */
-.terminal-mock{
-  margin-top:48px;width:min(680px,100%);background:var(--bg2);border:1px solid var(--border);
-  border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);
-  text-align:left;
+/* ---- Install box ---- */
+.install-box{
+  background:var(--bg2);border:1px solid var(--border);border-radius:4px;
+  padding:12px 20px;display:inline-flex;align-items:center;gap:12px;
+  cursor:pointer;transition:border-color .2s;position:relative;
+  font-size:13px;
 }
-.terminal-bar{
-  display:flex;align-items:center;gap:8px;padding:10px 14px;
-  background:#1a1a24;border-bottom:1px solid var(--border);
+.install-box:hover{border-color:var(--accent)}
+.install-box .prompt{color:var(--dim)}
+.install-box .cmd{color:var(--green)}
+.install-box .copied{
+  position:absolute;top:-24px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:var(--accent);opacity:0;transition:opacity .2s;
 }
-.terminal-dot{width:10px;height:10px;border-radius:50%}
-.terminal-dot.r{background:var(--red)}.terminal-dot.y{background:var(--yellow)}.terminal-dot.g{background:var(--green)}
-.terminal-body{padding:16px 18px;font-size:13px;line-height:1.8}
-.terminal-body .line{display:block}
-.terminal-body .ps1{color:var(--green)}
-.terminal-body .cmd{color:#fff}
-.terminal-body .out{color:#888}
-.terminal-body .cursor{
-  display:inline-block;width:8px;height:15px;background:var(--accent);
-  animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px;
+.install-box:hover .copied{opacity:0.7}
+.install-box.flash .copied{opacity:1 !important}
+
+/* ---- Terminal mock ---- */
+.term{
+  margin-top:40px;width:min(640px,100%);background:var(--bg2);
+  border:1px solid var(--border);border-radius:6px;overflow:hidden;
+  box-shadow:0 16px 48px rgba(0,0,0,0.5);text-align:left;
+}
+.term-bar{
+  display:flex;align-items:center;gap:6px;padding:10px 14px;
+  background:var(--bg3);border-bottom:1px solid var(--border);font-size:12px;color:var(--fg2);
+}
+.term-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.term-dot.r{background:#ff5f56}.term-dot.y{background:#ffbd2e}.term-dot.g{background:#27c93f}
+.term-bar span{margin-left:8px}
+.term-body{padding:14px 16px;font-size:12px;line-height:1.9;white-space:pre}
+.term-body .ps{color:var(--green)}
+.term-body .c{color:var(--white)}
+.term-body .o{color:var(--fg2)}
+.term-body .h{color:var(--cyan)}
+.term-body .y{color:var(--yellow)}
+.cursor{
+  display:inline-block;width:7px;height:14px;background:var(--accent);
+  animation:blink 1s step-end infinite;vertical-align:text-bottom;
 }
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 
 /* ---- Sections ---- */
-section{padding:80px 24px}
-.section-inner{max-width:900px;margin:0 auto}
-.section-tag{
-  font-family:var(--pixel);font-size:9px;color:var(--accent);letter-spacing:2px;
-  text-transform:uppercase;margin-bottom:12px;
-}
-.section-title{
-  font-family:var(--pixel);font-size:clamp(13px,2.5vw,18px);color:#fff;
-  line-height:1.6;margin-bottom:32px;
-}
+section{padding:72px 20px}
+.inner{max-width:860px;margin:0 auto}
+.stag{font-size:12px;color:var(--dim);margin-bottom:6px}
+.stitle{font-size:clamp(16px,2.5vw,22px);color:var(--white);font-weight:700;margin-bottom:28px;line-height:1.5}
 
-/* ---- Feature grid ---- */
-.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+/* ---- Feature list ---- */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
 .feat{
-  background:var(--bg2);border:1px solid var(--border);border-radius:6px;
-  padding:24px;transition:border-color .2s;
+  background:var(--bg2);border:1px solid var(--border);border-radius:4px;
+  padding:20px;transition:border-color .15s;
 }
-.feat:hover{border-color:var(--accent)}
-.feat-icon{font-size:20px;margin-bottom:10px;display:block}
-.feat h3{font-size:14px;color:#fff;margin-bottom:8px}
-.feat p{font-size:12px;color:#888;line-height:1.7}
+.feat:hover{border-color:var(--dim)}
+.feat-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--white);font-weight:600}
+.feat-head .tag{color:var(--green);font-weight:400}
+.feat p{font-size:12px;color:var(--fg2);line-height:1.7}
 
-/* ---- How it works ---- */
-.steps{counter-reset:step}
+/* ---- Steps ---- */
+.steps{display:grid;gap:20px}
 .step{
-  display:flex;gap:20px;align-items:flex-start;margin-bottom:28px;
-  counter-increment:step;
+  display:flex;gap:16px;align-items:flex-start;
+  background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:18px 20px;
 }
-.step::before{
-  content:counter(step);font-family:var(--pixel);font-size:18px;
-  color:var(--accent);flex-shrink:0;width:40px;text-align:center;
-  line-height:1.8;
+.step-n{
+  color:var(--dim);font-size:14px;font-weight:700;flex-shrink:0;width:24px;
+  line-height:1.7;
 }
-.step-body h3{font-size:14px;color:#fff;margin-bottom:6px}
-.step-body p{font-size:12px;color:#888;line-height:1.7}
-.step-body code{
-  background:var(--bg);padding:2px 8px;border-radius:3px;
-  font-size:12px;color:var(--green);border:1px solid var(--border);
+.step h3{font-size:13px;color:var(--white);font-weight:600;margin-bottom:4px}
+.step p{font-size:12px;color:var(--fg2);line-height:1.7}
+.step code{
+  display:inline-block;margin-top:6px;padding:2px 8px;
+  background:var(--bg);border:1px solid var(--border);border-radius:3px;
+  font-size:12px;color:var(--green);
 }
-
-/* ---- Platforms ---- */
-.platform-grid{display:flex;gap:20px;flex-wrap:wrap}
-.platform{
-  flex:1;min-width:200px;background:var(--bg2);border:1px solid var(--border);
-  border-radius:6px;padding:24px;text-align:center;
-}
-.platform.supported{border-color:var(--green)}
-.platform.coming{opacity:0.5}
-.platform-icon{font-size:28px;margin-bottom:8px;display:block}
-.platform h3{font-size:13px;color:#fff;margin-bottom:6px}
-.platform p{font-size:11px;color:#888}
-.platform .badge{
-  display:inline-block;font-family:var(--pixel);font-size:8px;
-  padding:3px 8px;border-radius:3px;margin-top:8px;
-}
-.badge-ok{background:rgba(87,211,124,0.15);color:var(--green);border:1px solid rgba(87,211,124,0.3)}
-.badge-no{background:rgba(255,95,95,0.1);color:var(--red);border:1px solid rgba(255,95,95,0.2)}
 
 /* ---- CTA ---- */
-.cta{text-align:center;padding:80px 24px 100px}
-.cta-title{font-family:var(--pixel);font-size:clamp(12px,2vw,16px);color:#fff;margin-bottom:16px;line-height:1.6}
-.cta-sub{font-size:13px;color:#888;margin-bottom:32px}
+.cta{text-align:center;padding:72px 20px 80px}
+.cta h2{font-size:clamp(14px,2vw,18px);color:var(--white);font-weight:700;margin-bottom:12px}
+.cta p{font-size:13px;color:var(--fg2);margin-bottom:28px}
 
 /* ---- Footer ---- */
 footer{
-  text-align:center;padding:32px 24px;border-top:1px solid var(--border);
-  font-size:11px;color:#555;
+  text-align:center;padding:28px 20px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--dim);line-height:1.8;
 }
-footer a{color:var(--accent);text-decoration:none}
+
+/* ---- GitHub badge ---- */
+.gh-link{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;border:1px solid var(--border);border-radius:4px;
+  font-size:12px;color:var(--fg);transition:border-color .15s;
+}
+.gh-link:hover{border-color:var(--accent);color:var(--white);text-decoration:none}
+.gh-link svg{width:16px;height:16px;fill:currentColor}
 
 /* ---- Mobile ---- */
 @media(max-width:600px){
-  nav{padding:0 14px}
-  .hero{padding:100px 16px 40px}
-  .terminal-mock{margin-top:32px}
-  section{padding:48px 16px}
+  nav{padding:0 12px;font-size:12px}
+  .nav-links{gap:12px}
+  .hero{padding:80px 14px 40px}
+  section{padding:48px 14px}
   .features{grid-template-columns:1fr}
+  .term{margin-top:28px}
+  .install-box{font-size:12px;padding:10px 14px}
 }
 </style>
 </head>
 <body>
 
 <nav>
-  <div class="nav-logo">&gt; cc-term</div>
+  <div class="nav-logo"><span>~/</span>cc-term</div>
   <div class="nav-links">
     <a href="#features">Features</a>
-    <a href="#how">How It Works</a>
+    <a href="#start">Quick Start</a>
     <a href="/docs">Docs</a>
-    <a href="https://github.com/nicexe/cc-terminal" target="_blank">GitHub</a>
+    <a href="https://github.com/xbsura/cc-term" target="_blank">GitHub</a>
   </div>
 </nav>
 
 <div class="hero">
-  <div class="hero-badge">v1.0 &mdash; OPEN SOURCE</div>
-  <h1>Your <span class="accent">AI coding terminal</span><br>anywhere you go.</h1>
+  <div class="hero-label">open source &middot; macOS</div>
+  <h1>AI coding terminal<br>toolkit for <span class="hl">Claude Code</span></h1>
   <p class="hero-sub">
-    A self-hosted terminal environment built for Claude Code.
-    Access your dev sessions from any browser, any device.
-    No signup. No cloud lock-in. Just run it.
+    Isolated dev environment with session management, multi-provider API switching,
+    web-based remote access, and pre-installed productivity tools.
+    No signup. Self-hosted. One command to install.
   </p>
-  <div class="hero-cmd" onclick="navigator.clipboard.writeText('curl -fsSL https://ttyd.ink/install | bash')">
-    <span class="copy-hint">click to copy</span>
-    <span class="prompt">$</span> curl -fsSL https://ttyd.ink/install | bash
+  <div class="install-box" onclick="navigator.clipboard.writeText('curl -fsSL https://ttyd.ink/install | bash').then(()=>{this.classList.add('flash');setTimeout(()=>this.classList.remove('flash'),1200)})">
+    <span class="copied">copied!</span>
+    <span class="prompt">$</span>
+    <span class="cmd">curl -fsSL https://ttyd.ink/install | bash</span>
   </div>
 
-  <div class="terminal-mock">
-    <div class="terminal-bar">
-      <div class="terminal-dot r"></div>
-      <div class="terminal-dot y"></div>
-      <div class="terminal-dot g"></div>
+  <div style="margin-top:12px">
+    <a href="https://github.com/xbsura/cc-term" class="gh-link" target="_blank">
+      <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      xbsura/cc-term
+    </a>
+  </div>
+
+  <div class="term">
+    <div class="term-bar">
+      <div class="term-dot r"></div>
+      <div class="term-dot y"></div>
+      <div class="term-dot g"></div>
+      <span>cc-term &mdash; bash</span>
     </div>
-    <div class="terminal-body">
-      <span class="line"><span class="ps1">~ $</span> <span class="cmd">cc-term</span></span>
-      <span class="line"><span class="out">[cc-term] Opening session: main</span></span>
-      <span class="line"><span class="out">[cc-term] tmux attached.</span></span>
-      <span class="line">&nbsp;</span>
-      <span class="line"><span class="ps1">main:1 $</span> <span class="cmd">cc-term -r</span></span>
-      <span class="line"><span class="out">[cc-term] Registering: main</span></span>
-      <span class="line"><span class="out">  Registered: main</span></span>
-      <span class="line"><span class="out">  URL: https://ttyd.ink/t/a8f3...</span></span>
-      <span class="line">&nbsp;</span>
-      <span class="line"><span class="ps1">main:1 $</span> <span class="cursor"></span></span>
-    </div>
+    <div class="term-body"><span class="ps">~ $</span> <span class="c">cc-term</span>
+<span class="o">[cc-term] Opening session: main</span>
+<span class="o">[cc-term] Auto-recovering 2 saved session(s)...</span>
+
+<span class="ps">main:1 $</span> <span class="c">ccs</span>
+<span class="h">[cc-term]</span> <span class="o">Provider:</span> <span class="c">my-proxy</span>  <span class="o">(https://api.example.com)</span>
+
+<span class="y">╭──────────────────────────────────────╮</span>
+<span class="y">│</span> <span class="c"> Welcome to Claude Code!</span>              <span class="y">│</span>
+<span class="y">╰──────────────────────────────────────╯</span>
+
+<span class="ps">main:1 $</span> <span class="c">cc-term -r</span>
+<span class="o">[cc-term] Registering: main</span>
+<span class="o">  URL: https://ttyd.ink/t/a8f3c1e2...</span>
+
+<span class="ps">main:1 $</span> <span class="cursor"></span></div>
   </div>
 </div>
 
 <section id="features">
-  <div class="section-inner">
-    <div class="section-tag">// features</div>
-    <div class="section-title">Everything you need.<br>Nothing you don't.</div>
+  <div class="inner">
+    <div class="stag">// features</div>
+    <div class="stitle">Everything included. Nothing to configure.</div>
     <div class="features">
       <div class="feat">
-        <span class="feat-icon">&gt;_</span>
-        <h3>Instant Terminal Sharing</h3>
-        <p>One command to expose any tmux session over the web. Share a URL, open on your phone. Done.</p>
+        <div class="feat-head"><span class="tag">&gt;_</span> Remote Terminal</div>
+        <p>One command to expose any tmux session over the web. Built-in WebSocket reverse tunnel through NAT. Open on your phone or any browser.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#9638;</span>
-        <h3>Multi-Session Dashboard</h3>
-        <p>See all your sessions in one page. Click to connect. Switch panes. Split views. All in the browser.</p>
+        <div class="feat-head"><span class="tag">&#9638;</span> Multi-Session</div>
+        <p>Named tmux sessions with full lifecycle management. Aggregate dashboard shows all sessions. Click to connect, switch panes, all in browser.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#9889;</span>
-        <h3>Zero Config</h3>
-        <p>No accounts. No signup. No API keys for the terminal itself. Install, run, done. Close it when you're done.</p>
+        <div class="feat-head"><span class="tag">&#9881;</span> Provider Switching</div>
+        <p>Manage multiple Claude API endpoints. Switch providers with <code style="font-size:11px;color:var(--green)">ccs myproxy</code>. Health checks, quota display, one-command swap.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#128241;</span>
-        <h3>Mobile-First Web UI</h3>
-        <p>Responsive terminal with virtual keys, gesture support, and optimized touch layout. Works on any device.</p>
+        <div class="feat-head"><span class="tag">&#128190;</span> Auto Save &amp; Recover</div>
+        <p>Session state automatically saved every 5 minutes. On next launch, tmux sessions and Claude Code conversations are restored with <code style="font-size:11px;color:var(--green)">--continue</code>.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#128274;</span>
-        <h3>Session Protection</h3>
-        <p>Optional username/password per session. Private sessions hidden from the global page. You control access.</p>
+        <div class="feat-head"><span class="tag">&#128230;</span> Pre-installed Toolkit</div>
+        <p>bat (cat), btop (top), duf (df), tig, lazygit, vim, tmux — all pre-configured with isolated configs. Git shortcuts, tmux aliases, syntax-highlighted output.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#127760;</span>
-        <h3>Tunnel Through NAT</h3>
-        <p>Built-in reverse tunnel to ttyd.ink. Works behind firewalls, no port forwarding needed.</p>
+        <div class="feat-head"><span class="tag">&#128274;</span> Session Protection</div>
+        <p>Optional username/password per session. Private sessions hidden from the aggregate page. Token-based access with TLS encryption.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#9881;</span>
-        <h3>Built for Claude Code</h3>
-        <p>Pre-configured tmux, vim, and bash. Session persistence, auto-save, and restore. Optimized for AI workflows.</p>
+        <div class="feat-head"><span class="tag">&#128241;</span> Mobile Terminal</div>
+        <p>Touch-optimized web UI with virtual keys, session switching, and pane navigation. Works on phones and tablets.</p>
       </div>
       <div class="feat">
-        <span class="feat-icon">&#128230;</span>
-        <h3>Fully Self-Contained</h3>
-        <p>Isolated under ~/.cc-term. Own Python venv, own tmux config, own plugins. Won't touch your existing setup.</p>
+        <div class="feat-head"><span class="tag">&#128736;</span> Fully Isolated</div>
+        <p>Everything under ~/.cc-term. Own Python venv, own tmux socket, own bash profile, own history. Zero impact on your existing setup.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section id="how" style="background:var(--bg2)">
-  <div class="section-inner">
-    <div class="section-tag">// how it works</div>
-    <div class="section-title">Three commands. That's it.</div>
+<section id="start" style="background:var(--bg2)">
+  <div class="inner">
+    <div class="stag">// quick start</div>
+    <div class="stitle">Three steps. Under a minute.</div>
     <div class="steps">
       <div class="step">
-        <div class="step-body">
+        <div class="step-n">1</div>
+        <div>
           <h3>Install</h3>
-          <p>Run the installer. It sets up brew dependencies, tmux, vim, and the cc-term toolkit.</p>
-          <p style="margin-top:8px"><code>curl -fsSL https://ttyd.ink/install | bash</code></p>
+          <p>Installs Homebrew packages, creates isolated environment, deploys configs.</p>
+          <code>curl -fsSL https://ttyd.ink/install | bash</code>
         </div>
       </div>
       <div class="step">
-        <div class="step-body">
-          <h3>Launch a session</h3>
-          <p>Start a new terminal session or attach to an existing one. Named sessions persist across restarts.</p>
-          <p style="margin-top:8px"><code>cc-term</code> &nbsp;or&nbsp; <code>cc-term myproject</code></p>
+        <div class="step-n">2</div>
+        <div>
+          <h3>Open a session</h3>
+          <p>Creates a named tmux session in a new iTerm2 tab. Sessions persist across terminal closes.</p>
+          <code>cc-term</code> &nbsp;<span style="color:var(--fg2);font-size:12px">or</span>&nbsp; <code>cc-term myproject</code>
         </div>
       </div>
       <div class="step">
-        <div class="step-body">
+        <div class="step-n">3</div>
+        <div>
           <h3>Go remote</h3>
-          <p>Inside any session window, enable remote access. Get a URL, scan the QR code, open on your phone.</p>
-          <p style="margin-top:8px"><code>cc-term -r</code></p>
+          <p>Register the session for browser access. Get a URL, scan the QR code, open anywhere.</p>
+          <code>cc-term -r</code>
         </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="platform">
-  <div class="section-inner">
-    <div class="section-tag">// compatibility</div>
-    <div class="section-title">Host on Mac. Access anywhere.</div>
-    <div class="platform-grid">
-      <div class="platform supported">
-        <span class="platform-icon">&#63743;</span>
-        <h3>macOS</h3>
-        <p>Full support. Intel &amp; Apple Silicon. Homebrew-based install.</p>
-        <span class="badge badge-ok">SUPPORTED</span>
-      </div>
-      <div class="platform supported">
-        <span class="platform-icon">&#127760;</span>
-        <h3>Web Browser</h3>
-        <p>Access sessions from any modern browser. Desktop or mobile.</p>
-        <span class="badge badge-ok">ANY DEVICE</span>
-      </div>
-      <div class="platform coming">
-        <span class="platform-icon">&#128039;</span>
-        <h3>Linux</h3>
-        <p>Not yet supported. Contributions welcome.</p>
-        <span class="badge badge-no">PLANNED</span>
-      </div>
-      <div class="platform coming">
-        <span class="platform-icon">&#9632;</span>
-        <h3>Windows</h3>
-        <p>Not supported. Use WSL + browser access instead.</p>
-        <span class="badge badge-no">N/A</span>
       </div>
     </div>
   </div>
 </section>
 
 <div class="cta">
-  <div class="cta-title">Ready to start?</div>
-  <p class="cta-sub">Install in under a minute. No signup required.</p>
-  <div class="hero-cmd" onclick="navigator.clipboard.writeText('curl -fsSL https://ttyd.ink/install | bash')">
-    <span class="copy-hint">click to copy</span>
-    <span class="prompt">$</span> curl -fsSL https://ttyd.ink/install | bash
+  <h2>Ready to start?</h2>
+  <p>macOS only. No signup. No cloud dependency.</p>
+  <div class="install-box" onclick="navigator.clipboard.writeText('curl -fsSL https://ttyd.ink/install | bash').then(()=>{this.classList.add('flash');setTimeout(()=>this.classList.remove('flash'),1200)})">
+    <span class="copied">copied!</span>
+    <span class="prompt">$</span>
+    <span class="cmd">curl -fsSL https://ttyd.ink/install | bash</span>
+  </div>
+  <div style="margin-top:16px">
+    <a href="https://github.com/xbsura/cc-term" class="gh-link" target="_blank">
+      <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Star on GitHub
+    </a>
   </div>
 </div>
 
 <footer>
-  <p>cc-term &mdash; built for developers who code with AI.</p>
-  <p style="margin-top:6px"><a href="/docs">Docs</a> &middot; <a href="https://github.com/nicexe/cc-terminal">GitHub</a></p>
+  <p>cc-term &mdash; built for developers who code with AI</p>
+  <p><a href="/docs">docs</a> &middot; <a href="https://github.com/xbsura/cc-term">github</a> &middot; <a href="https://github.com/xbsura/cc-term/issues">issues</a></p>
 </footer>
 
 </body>

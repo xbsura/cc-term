@@ -134,6 +134,11 @@ ccs() {
             "$CC_PYTHON" "$CC_PROVIDER_MANAGER" delete "$@"
             return
             ;;
+        default)
+            shift
+            "$CC_PYTHON" "$CC_PROVIDER_MANAGER" set-default "$@"
+            return
+            ;;
         -h|--help)
             echo ""
             echo "ccs — Launch Claude Code with a provider"
@@ -142,6 +147,7 @@ ccs() {
             echo "  ccs <provider> -c        Launch with --continue"
             echo "  ccs -ls                  List all providers"
             echo "  ccs -new -api <url> -key <key> [-name <n>] [-appId <id>]"
+            echo "  ccs default <id>         Set the default provider"
             echo "  ccs -edit <id> [fields]  Edit a provider"
             echo "  ccs -delete <id>         Remove a provider"
             echo ""
@@ -173,10 +179,8 @@ ccs() {
 
     eval "$env_exports"
 
-    # Startup banner with quota
-    echo ""
-    "$CC_PYTHON" "$CC_PROVIDER_MANAGER" startup-info "${provider_name:-default}" 2>/dev/null
-    echo ""
+    # Startup banner
+    echo -e "\033[0;36m[cc-term]\033[0m Provider: \033[1m${CC_PROVIDER_NAME}\033[0m  (${ANTHROPIC_BASE_URL})"
 
     if [[ "${1:-}" == "-c" ]]; then
         shift
@@ -292,7 +296,7 @@ _ccs_complete() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     first="${COMP_WORDS[1]:-}"
 
-    local ccs_opts="-ls -new -edit -delete -h"
+    local ccs_opts="-ls -new -edit -delete default -h"
     local provider_fields="-name -api -key -appId"
     local provider_ids
     provider_ids="$(_cc_term_provider_identifiers | tr '\n' ' ')"
@@ -322,6 +326,12 @@ _ccs_complete() {
             return
             ;;
         -delete)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$provider_ids" -- "$cur") )
+            fi
+            return
+            ;;
+        default)
             if [[ $COMP_CWORD -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "$provider_ids" -- "$cur") )
             fi

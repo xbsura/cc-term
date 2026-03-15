@@ -1,93 +1,50 @@
-# 部署 cc-term 到 ttyd.ink
+# 部署 cc-term 代理服务器
 
-## 架构说明
-
-由于本地 ttyd 运行在本地端口，远程代理服务器无法直接访问，需要使用以下方案之一：
-
-### 方案 1: frp 反向代理（推荐）
-
-使用 frp 将本地 ttyd 端口暴露到远程服务器。
-
-#### 服务器端 (ttyd.ink)
-
-1. 安装 frp server:
-```bash
-wget https://github.com/fatedier/frp/releases/download/v0.52.0/frp_0.52.0_linux_amd64.tar.gz
-tar -xzf frp_0.52.0_linux_amd64.tar.gz
-cd frp_0.52.0_linux_amd64
-```
-
-2. 配置 frps.ini:
-```ini
-[common]
-bind_port = 7000
-vhost_http_port = 8080
-token = your-secret-token
-```
-
-3. 启动 frp server:
-```bash
-./frps -c frps.ini
-```
-
-#### 客户端 (本地 Mac)
-
-1. 安装 frp client:
-```bash
-brew install frp
-```
-
-2. 配置 frpc.ini:
-```ini
-[common]
-server_addr = ttyd.ink
-server_port = 7000
-token = your-secret-token
-
-[ttyd-{session}]
-type = http
-local_ip = 127.0.0.1
-local_port = 17681
-custom_domains = {session}.ttyd.ink
-```
-
-### 方案 2: 使用公网 IP
-
-如果本地有公网 IP，可以直接注册本地 ttyd 地址到远程代理。
-
-## 服务器部署步骤
-
-1. 上传文件到服务器:
-```bash
-scp -r bin config deploy root@ttyd.ink:/tmp/cc-term-deploy/
-```
-
-2. SSH 登录服务器:
-```bash
-ssh root@ttyd.ink
-```
-
-3. 运行部署脚本:
-```bash
-cd /tmp/cc-term-deploy/deploy
-chmod +x deploy.sh
-./deploy.sh
-```
-
-4. 验证服务:
-```bash
-systemctl status cc-term-proxy
-curl https://ttyd.ink
-```
-
-## 本地使用
+## 快速部署
 
 ```bash
-# 使用远程代理（默认）
+# 1. 上传文件到服务器
+scp bin/cc-proxy-server.py root@your-server:/tmp/
+scp -r config/ttyd root@your-server:/tmp/
+
+# 2. SSH 到服务器运行部署脚本
+ssh root@your-server
+bash /tmp/setup-server.sh your-domain.com admin@your-domain.com
+```
+
+详细步骤请参阅 [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)。
+
+## 文件说明
+
+| 文件 | 说明 |
+|------|------|
+| `setup-server.sh` | 一键部署脚本（安装依赖、配置 systemd、Nginx、SSL） |
+| `deploy.sh` | 部署脚本（手动步骤版本） |
+| `nginx.conf` | Nginx 配置模板 |
+| `package.sh` | 打包部署文件 |
+| `publish.sh` | 发布脚本 |
+
+## 服务器端架构
+
+```
+cc-proxy-server.py (port 9999)
+  ├── 接收客户端 WebSocket 反向隧道连接
+  ├── 管理 session 注册（agg_key/agg_secret 认证）
+  ├── 代理浏览器 WebSocket 到本地 ttyd
+  └── 提供 session 聚合页面
+          ↕
+Nginx (port 443, SSL)
+  └── 反向代理所有请求到 9999
+```
+
+## 客户端使用
+
+```bash
+# 使用默认代理 (ttyd.ink)
 cc-term main -r
 
-# 使用本地代理
-cc-term main -r --local
+# 使用自建代理
+CC_PROXY_HOST=your-domain.com cc-term main -r
 
 # 带密码保护
 cc-term main -r -u admin -p secret
