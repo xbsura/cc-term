@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
@@ -22,7 +22,7 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
 .dot.on{background:#27ae60}.dot.off{background:#e74c3c}
 
 /* ---- Session panel ---- */
-#session-panel{display:none;position:absolute;top:40px;left:0;right:0;bottom:0;z-index:100;background:rgba(13,13,26,0.97);padding:20px;overflow-y:auto}
+#session-panel{display:none;position:absolute;top:40px;left:0;right:0;bottom:0;z-index:100;padding:20px;overflow-y:auto}
 #session-panel.show{display:block}
 #session-panel h2{font-size:18px;margin-bottom:16px;color:#5b9bd5}
 .session-card{padding:14px 16px;margin-bottom:10px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:8px;cursor:pointer;transition:all .15s}
@@ -31,7 +31,8 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
 .session-card .meta{font-size:12px;color:#6a6a8a;margin-top:4px}
 
 /* ---- Terminal ---- */
-#terminal-wrap{flex:1;overflow:hidden;position:relative}
+#terminal-wrap{flex:1;overflow:hidden;position:relative;transition:opacity 0.3s}
+#terminal-wrap.dimmed{opacity:0.15}
 #terminal{height:100%;width:100%}
 
 /* ---- Toolbar (virtual keys) ---- */
@@ -107,15 +108,15 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
 <script>
 (function(){
-  // ---- Extract token from URL ----
-  const params = new URLSearchParams(location.search);
-  const TOKEN = params.get('token') || '';
+  // ---- Extract agg_key from URL path ----
+  const AGG_KEY = location.pathname.split('/')[1] || '';
 
   // ---- State ----
   let ws = null;
   let connected = false;
   let ctrlMode = false;
   let currentSession = '';
+  let currentProxyPath = '';
   let windowPollTimer = null;
 
   // ---- Terminal setup ----
@@ -151,12 +152,18 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
   screen.orientation && screen.orientation.addEventListener('change', () => setTimeout(fitTerminal, 200));
 
   // ---- WebSocket connection ----
-  function connect(sessionName) {
+  function connect(sessionName, proxyPath) {
     if (ws) { ws.close(); }
     currentSession = sessionName || '';
+    currentProxyPath = proxyPath || '';
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${proto}//${location.host}/ws?token=${TOKEN}&session=${encodeURIComponent(currentSession)}`;
+    let url;
+    if (currentProxyPath) {
+      url = `${proto}//${location.host}${currentProxyPath}ws`;
+    } else {
+      url = `${proto}//${location.host}/ws?session=${encodeURIComponent(currentSession)}`;
+    }
 
     ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
@@ -166,6 +173,7 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
       document.getElementById('dot').className = 'dot on';
       document.getElementById('status-text').textContent = currentSession || 'shell';
       document.getElementById('session-panel').classList.remove('show');
+      document.getElementById('terminal-wrap').classList.remove('dimmed');
 
       // Send initial resize
       sendResize(term.cols, term.rows);
@@ -190,6 +198,7 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
       // Show session panel on disconnect
       setTimeout(() => {
         document.getElementById('session-panel').classList.add('show');
+        document.getElementById('terminal-wrap').classList.add('dimmed');
         loadSessions();
       }, 500);
     };
@@ -266,19 +275,22 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
   // ---- Session management ----
   window.toggleSessions = function() {
     const panel = document.getElementById('session-panel');
+    const wrap = document.getElementById('terminal-wrap');
     const isShown = panel.classList.contains('show');
     if (isShown) {
       panel.classList.remove('show');
+      wrap.classList.remove('dimmed');
       term.focus();
     } else {
       panel.classList.add('show');
+      wrap.classList.add('dimmed');
       loadSessions();
     }
   };
 
-  window.connectSession = function(name) {
+  window.connectSession = function(name, proxyPath) {
     term.clear();
-    connect(name);
+    connect(name, proxyPath);
   };
 
   window.connectProtectedSession = function(name, proxyPath) {
@@ -294,7 +306,8 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
   };
 
   function loadSessions() {
-    fetch(`/api/sessions?token=${TOKEN}`)
+    const sessionsUrl = AGG_KEY ? '/api/sessions?agg_key=' + encodeURIComponent(AGG_KEY) : '/api/sessions';
+    fetch(sessionsUrl)
       .then(r => r.json())
       .then(sessions => {
         const list = document.getElementById('session-list');
@@ -305,7 +318,7 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
         sessions.forEach(s => {
           const badge = s.attached > 0 ? ' (attached)' : '';
           const nameDisplay = s.protected ? '🔒 ' + s.name : s.name;
-          const onclick = s.protected ? `connectProtectedSession('${s.name}', '${s.proxy_path}')` : `connectSession('${s.name}')`;
+          const onclick = s.protected ? `connectProtectedSession('${s.name}', '${s.proxy_path}')` : `connectSession('${s.name}', '${s.proxy_path}')`;
           html += `<div class="session-card" onclick="${onclick}">
             <div class="name">${nameDisplay}${badge}</div>
             <div class="meta">${s.windows} window(s)</div>
@@ -329,7 +342,7 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
 
   function pollWindows() {
     if (!currentSession) { document.getElementById('wintabs').innerHTML = ''; return; }
-    fetch(`/api/windows?token=${TOKEN}&session=${encodeURIComponent(currentSession)}`)
+    fetch(`/api/windows?agg_key=${AGG_KEY}&session=${encodeURIComponent(currentSession)}`)
       .then(r => r.json())
       .then(windows => {
         const container = document.getElementById('wintabs');
@@ -359,6 +372,7 @@ html,body{height:100%;overflow:hidden;background:#1a1a2e;color:#e0e0e0;font-fami
 
   // ---- Initial load ----
   document.getElementById('session-panel').classList.add('show');
+  document.getElementById('terminal-wrap').classList.add('dimmed');
   loadSessions();
 })();
 </script>

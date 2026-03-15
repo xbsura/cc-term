@@ -7,7 +7,7 @@ Supports three registration kinds:
 - backend: local HTTP/WebSocket backends routed by ?token=
 - tmate: metadata-only entries rendered on the aggregate page and exposed as
   local redirect URLs under /tmate/<token>
-- ttyd: local ttyd backends routed by /t/<token>/ path prefix
+- ttyd: local ttyd backends routed by /<agg_key>/<token>/ path prefix
 - tunnel: remote ttyd backends connected via WebSocket reverse tunnel
 """
 
@@ -352,15 +352,20 @@ echo ""
                 continue
             item = dict(info)
             item["token"] = token
-            item["proxy_path"] = f"/tmate/{token}"
+            session_agg_key = info.get("agg_key", "")
+            if session_agg_key:
+                item["proxy_path"] = f"/{session_agg_key}/{token}"
+            else:
+                item["proxy_path"] = f"/tmate/{token}"
             items.append(item)
         for token, info in ttyd_sessions.items():
             if filter_agg_key and info.get("agg_key") != filter_agg_key:
                 continue
             item = dict(info)
             item["token"] = token
-            item["proxy_path"] = f"/t/{token}/"
-            item["web_url"] = f"/t/{token}/"
+            session_agg_key = info.get("agg_key", "")
+            item["proxy_path"] = f"/{session_agg_key}/{token}/"
+            item["web_url"] = f"/{session_agg_key}/{token}/"
             items.append(item)
         items.sort(key=lambda item: item.get("name", item.get("label", "")))
         return items
@@ -591,57 +596,59 @@ echo ""
                 writer.close()
                 return
 
-        if path.startswith("/t/"):
-            parts = path.split("/", 3)  # ['', 't', token, ...]
-            ttyd_token = parts[2] if len(parts) > 2 else ""
-            info = ttyd_sessions.get(ttyd_token)
-            if not info:
-                await asyncio.sleep(3)
-                writer.write(self.http_response("404 Not Found", "text/plain", "Session not found"))
-                await writer.drain()
-                writer.close()
-                return
-
-            # Check authentication if session is protected
-            if info.get("protected"):
-                if not check_basic_auth(headers, info.get("username", ""), info.get("password", "")):
-                    writer.write(self.http_response(
-                        "401 Unauthorized",
-                        "text/plain",
-                        "Authentication required",
-                        {"WWW-Authenticate": 'Basic realm="cc-term"'}
-                    ))
+        if path.startswith("/") and path.count("/") >= 2:
+            parts = path.strip("/").split("/", 2)  # [agg_key, token, rest...]
+            if len(parts) >= 2 and parts[0] in agg_keys:
+                agg_key_path = parts[0]
+                ttyd_token = parts[1]
+                info = ttyd_sessions.get(ttyd_token)
+                if not info or info.get("agg_key") != agg_key_path:
+                    await asyncio.sleep(3)
+                    writer.write(self.http_response("404 Not Found", "text/plain", "Session not found"))
                     await writer.drain()
                     writer.close()
                     return
 
-            if info.get("kind") == "tunnel":
-                backend_rw = await self._get_tunnel_backend(ttyd_token)
-                if backend_rw is None:
-                    writer.write(self.http_response(
-                        "504 Gateway Timeout", "text/plain",
-                        "Tunnel client not connected or timed out"
-                    ))
-                    await writer.drain()
-                    writer.close()
+                # Check authentication if session is protected
+                if info.get("protected"):
+                    if not check_basic_auth(headers, info.get("username", ""), info.get("password", "")):
+                        writer.write(self.http_response(
+                            "401 Unauthorized",
+                            "text/plain",
+                            "Authentication required",
+                            {"WWW-Authenticate": 'Basic realm="cc-term"'}
+                        ))
+                        await writer.drain()
+                        writer.close()
+                        return
+
+                if info.get("kind") == "tunnel":
+                    backend_rw = await self._get_tunnel_backend(ttyd_token)
+                    if backend_rw is None:
+                        writer.write(self.http_response(
+                            "504 Gateway Timeout", "text/plain",
+                            "Tunnel client not connected or timed out"
+                        ))
+                        await writer.drain()
+                        writer.close()
+                        return
+                    tunnel_r, tunnel_w = backend_rw
+                    if headers.get("upgrade", "").lower() == "websocket":
+                        await self._proxy_websocket_tunnel(
+                            reader, writer, raw_path, headers, tunnel_r, tunnel_w
+                        )
+                    else:
+                        await self._proxy_http_tunnel(
+                            writer, method, raw_path, headers, body_data, tunnel_r, tunnel_w
+                        )
                     return
-                tunnel_r, tunnel_w = backend_rw
+
+                backend_port = info["port"]
                 if headers.get("upgrade", "").lower() == "websocket":
-                    await self._proxy_websocket_tunnel(
-                        reader, writer, raw_path, headers, tunnel_r, tunnel_w
-                    )
-                else:
-                    await self._proxy_http_tunnel(
-                        writer, method, raw_path, headers, body_data, tunnel_r, tunnel_w
-                    )
+                    await self._proxy_websocket(reader, writer, raw_path, headers, backend_port)
+                    return
+                await self._proxy_http(writer, raw_path, backend_port)
                 return
-
-            backend_port = info["port"]
-            if headers.get("upgrade", "").lower() == "websocket":
-                await self._proxy_websocket(reader, writer, raw_path, headers, backend_port)
-                return
-            await self._proxy_http(writer, raw_path, backend_port)
-            return
 
         if path.startswith("/tmate/") and method == "GET":
             token = path.split("/", 2)[2]
@@ -691,6 +698,17 @@ echo ""
                 if not name or not web_url:
                     raise ValueError("tmate registration requires name and web_url")
 
+                # agg_key/agg_secret validation
+                req_agg_key = data.get("agg_key", "")
+                req_agg_secret = data.get("agg_secret", "")
+                if not req_agg_key or agg_keys.get(req_agg_key) != req_agg_secret:
+                    writer.write(self.http_response(
+                        "403 Forbidden", "application/json",
+                        json.dumps({"error": "invalid agg_key/agg_secret"}),
+                    ))
+                    await writer.drain()
+                    return
+
                 for token, info in list(tmate_sessions.items()):
                     if info.get("name") == name:
                         del tmate_sessions[token]
@@ -707,11 +725,12 @@ echo ""
                     "attached": data.get("attached", "0"),
                     "windows": data.get("windows", "?"),
                     "created_at": int(time.time()),
+                    "agg_key": req_agg_key,
                 }
                 writer.write(self.http_response(
                     "200 OK",
                     "application/json",
-                    json.dumps({"token": token, "path": f"/tmate/{token}"}),
+                    json.dumps({"token": token, "path": f"/{req_agg_key}/{token}"}),
                 ))
             elif kind == "ttyd":
                 name = data.get("name") or data.get("label")
@@ -754,7 +773,7 @@ echo ""
                 writer.write(self.http_response(
                     "200 OK",
                     "application/json",
-                    json.dumps({"token": token, "path": f"/t/{token}/"}),
+                    json.dumps({"token": token, "path": f"/{req_agg_key}/{token}/"}),
                 ))
             elif kind == "tunnel":
                 name = data.get("name") or data.get("label")
@@ -803,7 +822,7 @@ echo ""
                 writer.write(self.http_response(
                     "200 OK",
                     "application/json",
-                    json.dumps({"token": token, "path": f"/t/{token}/"}),
+                    json.dumps({"token": token, "path": f"/{req_agg_key}/{token}/"}),
                 ))
             else:
                 backend_port = int(data["port"])

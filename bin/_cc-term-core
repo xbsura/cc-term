@@ -305,8 +305,13 @@ register_ttyd_session() {
         USE_TUNNEL=0
     fi
 
+    # Obtain aggregate credentials (before ttyd so AGG_KEY is available for base-path)
+    if ! get_or_create_agg_credentials "$proxy_host" "$proxy_port"; then
+        return 1
+    fi
+
     ttyd -W -p "$ttyd_port" \
-        --base-path "/t/${token}" \
+        --base-path "/${AGG_KEY}/${token}" \
         -t cursorStyle=bar \
         -t cursorBlink=true \
         -t fontSize=14 \
@@ -328,12 +333,6 @@ register_ttyd_session() {
     attached=${session_meta#*|}
     [[ -z "$windows" || "$windows" == "$session_meta" ]] && windows="?"
     [[ -z "$attached" || "$attached" == "$session_meta" ]] && attached="0"
-
-    # Obtain aggregate credentials
-    if ! get_or_create_agg_credentials "$proxy_host" "$proxy_port"; then
-        kill "$ttyd_pid" 2>/dev/null || true
-        return 1
-    fi
 
     register_result=$(SESSION_NAME="$session_name" TTYD_PORT="$ttyd_port" TOKEN="$token" WINDOWS="$windows" ATTACHED="$attached" PROXY_HOST="$proxy_host" PROXY_PORT="$proxy_port" USERNAME="$username" PASSWORD="$password" USE_TUNNEL="$USE_TUNNEL" AGG_KEY="$AGG_KEY" AGG_SECRET="$AGG_SECRET" "$CC_PYTHON" -c "
 import http.client, json, os, sys, ssl
