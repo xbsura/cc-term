@@ -475,6 +475,7 @@ wait_for_tmux_session() {
 
 open_iterm_tab() {
     local session_name="$1"
+    local start_dir="${CC_TERM_PWD:-$HOME}"
 
     # Strategy: start bash with our profile, then type tmux command separately.
     # The tmux alias in bash_profile already adds -L cc-term -f tmux.conf,
@@ -490,7 +491,7 @@ tell application "iTerm"
             set name to "${session_name}"
             write text "exec bash --rcfile '${BASH_PROFILE}'"
             delay 0.5
-            write text "tmux new-session -A -s ${session_name}"
+            write text "cd '${start_dir}' && tmux new-session -A -s ${session_name}"
         end tell
     end tell
 end tell
@@ -504,7 +505,7 @@ tell application "iTerm"
         set name to "${session_name}"
         write text "exec bash --rcfile '${BASH_PROFILE}'"
         delay 0.5
-        write text "tmux new-session -A -s ${session_name}"
+        write text "cd '${start_dir}' && tmux new-session -A -s ${session_name}"
     end tell
 end tell
 EOF
@@ -942,11 +943,32 @@ except: print('ttyd')
     # ---- Update ----
     update)
         echo ""
-        info "Updating cc-term components..."
+        info "Updating cc-term..."
         echo ""
 
-        # 1. Claude Code CLI
-        echo -e "  ${BOLD}[1/4] Claude Code CLI${NC}"
+        # 0. Git pull latest code
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+        SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
+        if [[ -d "$SOURCE_DIR/.git" ]]; then
+            echo -e "  ${BOLD}[0/5] Pull latest code${NC}"
+            info "  Pulling from $(cd "$SOURCE_DIR" && git remote get-url origin 2>/dev/null || echo 'origin') ..."
+            (cd "$SOURCE_DIR" && git pull --rebase 2>&1 | sed 's/^/        /')
+            ok "  Code updated."
+            echo ""
+
+            # Re-run install.sh to apply all changes
+            echo -e "  ${BOLD}[1/5] Run install.sh${NC}"
+            info "  Re-running install.sh ..."
+            (cd "$SOURCE_DIR" && bash install.sh 2>&1 | sed 's/^/        /')
+            ok "  install.sh complete."
+            echo ""
+        else
+            warn "  Source directory is not a git repo — skipping pull & install."
+            echo ""
+        fi
+
+        # 2. Claude Code CLI
+        echo -e "  ${BOLD}[2/5] Claude Code CLI${NC}"
         if command -v claude &>/dev/null; then
             current_ver=$(claude --version 2>/dev/null || echo "unknown")
             info "  Current version: $current_ver"
@@ -963,8 +985,8 @@ except: print('ttyd')
         fi
         echo ""
 
-        # 2. Brew packages
-        echo -e "  ${BOLD}[2/4] Brew packages${NC}"
+        # 3. Brew packages
+        echo -e "  ${BOLD}[3/5] Brew packages${NC}"
         BREW_PKGS=(bash tmux vim bat btop duf tig lazygit qrencode)
         outdated=$(brew outdated --formula 2>/dev/null)
         need_update=()
@@ -982,8 +1004,8 @@ except: print('ttyd')
         fi
         echo ""
 
-        # 3. Tmux plugins (TPM)
-        echo -e "  ${BOLD}[3/4] Tmux plugins${NC}"
+        # 4. Tmux plugins (TPM)
+        echo -e "  ${BOLD}[4/5] Tmux plugins${NC}"
         TPM_DIR="$CC_HOME/tmux/plugins/tpm"
         if [[ -d "$TPM_DIR" ]]; then
             TMUX_PLUGIN_MANAGER_PATH="$CC_HOME/tmux/plugins" \
@@ -994,8 +1016,8 @@ except: print('ttyd')
         fi
         echo ""
 
-        # 4. cc-term configs
-        echo -e "  ${BOLD}[4/4] cc-term configs${NC}"
+        # 5. cc-term configs
+        echo -e "  ${BOLD}[5/5] cc-term configs${NC}"
         # Check if source directory is accessible
         SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
         SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
@@ -1325,6 +1347,7 @@ except Exception:
             info "Registering: $ER_SESSION"
             if register_ttyd_session "$ER_SESSION" "$ER_HOST" "$ER_PORT" "$OPT_USERNAME" "$OPT_PASSWORD"; then
                 ok "Registered: $ER_SESSION"
+                tmux -L cc-term setw -g aggressive-resize on 2>/dev/null || true
                 # Show info in a new tmux window
                 tmux -L cc-term new-window -t "$ER_SESSION" -n "remote" \
                     "echo ''; echo -e '${GREEN}${BOLD}Remote Access${NC}'; echo ''; echo -e '  ${BOLD}Session:${NC}   ${ER_SESSION}'; echo -e '  ${BOLD}URL:${NC}       ${CYAN}${TTYD_REGISTERED_URL}${NC}'; echo -e '  ${BOLD}Aggregate:${NC} ${CYAN}${TTYD_AGGREGATE_URL}${NC}'; echo ''; echo -e '  ${DIM}Press any key to close this window${NC}'; read -n1; exit" 2>/dev/null || true
@@ -1390,6 +1413,8 @@ except Exception:
                 err "No sessions were registered."
                 exit 1
             fi
+
+            tmux -L cc-term setw -g aggressive-resize on 2>/dev/null || true
 
             # Show info in a tmux window of the first registered session
             FIRST_SESSION=$(list_target_sessions "$SESSION_NAME" | head -1)

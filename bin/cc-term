@@ -27,6 +27,7 @@ usage() {
     echo "  cc-term -p -edit <id> [fields]    Edit a provider"
     echo "  cc-term -p -delete <id>           Remove a provider"
     echo ""
+    echo "  cc-term --update                  Pull latest code and update everything"
     echo "  cc-term -h                        Show this help"
     echo "  cc-term -hh                       Show detailed help"
     echo ""
@@ -103,7 +104,7 @@ usage_detailed() {
 }
 
 if [[ $# -eq 0 ]]; then
-    exec env CC_TERM_NAME="cc-term" "$CORE_BIN"
+    exec env CC_TERM_NAME="cc-term" CC_TERM_PWD="$PWD" "$CORE_BIN"
 fi
 
 case "$1" in
@@ -126,7 +127,7 @@ case "$1" in
         fi
         session_name="$1"
         shift
-        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" "$session_name" "$@"
+        exec env CC_TERM_NAME="cc-term" CC_TERM_PWD="$PWD" "$CORE_BIN" "$session_name" "$@"
         ;;
     -delete)
         shift
@@ -136,6 +137,9 @@ case "$1" in
             exit 1
         fi
         exec env CC_TERM_NAME="cc-term" "$CORE_BIN" delete "$1"
+        ;;
+    --update)
+        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" update
         ;;
     -provider|-p)
         shift
@@ -163,10 +167,10 @@ case "$1" in
         ;;
     *)
         if [[ "$1" == -* ]]; then
-            exec env CC_TERM_NAME="cc-term" "$CORE_BIN" "$@"
+            exec env CC_TERM_NAME="cc-term" CC_TERM_PWD="$PWD" "$CORE_BIN" "$@"
         fi
         session_name="$1"
         shift
-        exec env CC_TERM_NAME="cc-term" "$CORE_BIN" "$session_name" "$@"
+        exec env CC_TERM_NAME="cc-term" CC_TERM_PWD="$PWD" "$CORE_BIN" "$session_name" "$@"
         ;;
 esac

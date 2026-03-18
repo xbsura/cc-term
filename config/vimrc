@@ -62,7 +62,7 @@ nnoremap <C-s> :w<CR>
 inoremap <C-s> <Esc>:w<CR>a
 
 " Clear search highlight
-nnoremap <Esc><Esc> :nohlsearch<CR>
+nnoremap <leader><space> :nohlsearch<CR>
 
 " Better window navigation
 nnoremap <C-h> <C-w>h

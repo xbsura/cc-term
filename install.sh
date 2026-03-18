@@ -92,14 +92,17 @@ fi
 # --- Formulae ---
 FORMULAE=(bash tmux vim bat btop duf tig lazygit qrencode python@3)
 
-# Map package names to binary names for fast detection
-declare -A PKG_TO_BIN=(
-    ["python@3"]="python3"
-)
+# Map package names to binary names for fast detection (bash 3.2 compatible)
+pkg_to_bin() {
+    case "$1" in
+        python@3) echo "python3" ;;
+        *)        echo "$1" ;;
+    esac
+}
 
 info "Installing formulae..."
 for pkg in "${FORMULAE[@]}"; do
-    bin_name="${PKG_TO_BIN[$pkg]:-$pkg}"
+    bin_name="$(pkg_to_bin "$pkg")"
 
     if [[ "$FORCE_INSTALL" == "true" ]]; then
         if brew_run list "$pkg" &>/dev/null; then

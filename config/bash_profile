@@ -161,7 +161,12 @@ ccs() {
 
     unset ANTHROPIC_DEFAULT_OPUS_MODEL
 
-    if [[ $# -gt 0 && "$1" != -* ]]; then
+    if [[ $# -gt 0 && "$1" == -* ]]; then
+        echo -e "\033[1;33m[ccs]\033[0m Unknown option: $1  (try ccs -h)"
+        return 1
+    fi
+
+    if [[ $# -gt 0 ]]; then
         provider_name="$1"
         shift
     fi
@@ -184,9 +189,9 @@ ccs() {
 
     if [[ "${1:-}" == "-c" ]]; then
         shift
-        claude --dangerously-skip-permissions --continue "$@"
+        claude --dangerously-skip-permissions --model opus --continue "$@"
     else
-        claude --dangerously-skip-permissions "$@"
+        claude --dangerously-skip-permissions --model opus "$@"
     fi
 }
 

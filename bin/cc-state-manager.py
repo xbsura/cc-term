@@ -276,7 +276,7 @@ def recover():
             safe_cwd = cwd.replace("'", "'\\''")
             run_tmux(
                 "send-keys", "-t", target,
-                f"cd '{safe_cwd}' && claude --dangerously-skip-permissions --continue",
+                f"cd '{safe_cwd}' && ccs -c",
                 "Enter"
             )
             ok(f"  Resumed in {target} -> {cwd}")
